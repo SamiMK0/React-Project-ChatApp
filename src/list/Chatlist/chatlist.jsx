@@ -12,7 +12,7 @@ export default function Chatlist() {
     const [input, SetInput] = useState("");
 
     const { currentUser } = useUserStore();
-    const { chatId, changeChat } = useChatStore();
+    const { chatId, changeChat } = useChatStore();  // We already have the chatId from store, so we can use it here to track the selected chat.
 
     useEffect(() => {
         if (!currentUser?.id) return; // Ensure user exists
@@ -24,7 +24,7 @@ export default function Chatlist() {
             }
 
             const items = res.data()?.chats || [];
-            
+
             // Remove duplicate chat IDs
             const uniqueItems = [];
             const chatIds = new Set();
@@ -57,7 +57,7 @@ export default function Chatlist() {
         });
 
         const chatIndex = userChats.findIndex((item) => item.chatId === chat.chatId);
-        
+
         // Update the 'isSeen' property to true
         userChats[chatIndex].isSeen = true;
 
@@ -81,10 +81,10 @@ export default function Chatlist() {
             <div className="search">
                 <div className="searchbar">
                     <img src="./search.png" alt="" />
-                    <input 
-                        type="text" 
-                        placeholder="Search" 
-                        onChange={(e) => SetInput(e.target.value)} 
+                    <input
+                        type="text"
+                        placeholder="Search"
+                        onChange={(e) => SetInput(e.target.value)}
                     />
                 </div>
                 <img
@@ -96,26 +96,35 @@ export default function Chatlist() {
             </div>
 
             {filteredChats.map((chat) => (
-                <div
-                    className="item"
-                    key={chat.chatId}
-                    onClick={() => handleSelect(chat)}
-                    style={{
-                        backgroundColor: chat?.isSeen ? "transparent" : "#5183fe",
-                    }}
-                >
-                    <img
-                        src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatar || "./avatar.png"}
-                        alt=""
-                    />
-                    <div className="texts">
-                        <span>
-                            {chat.user.blocked.includes(currentUser.id) ? "User" : chat.user.username}
-                        </span>
-                        <p>{chat.lastMessage}</p>
-                    </div>
-                </div>
-            ))}
+    <div
+        className="item"
+        key={chat.chatId}
+        onClick={() => handleSelect(chat)}
+        style={{
+            backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a", // Darker background for unread chats
+            borderLeft: chat.isSeen ? "none" : "5px solid red", // Red highlight for unread messages
+        }}
+    >
+        <img
+            src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatar || "./avatar.png"}
+            alt=""
+        />
+        <div className="texts">
+            <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
+                {chat.user.blocked.includes(currentUser.id) ? "User" : chat.user.username}
+            </span>
+            <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
+                {chat.lastMessage}
+            </p>
+        </div>
+
+        {/* Red dot for unread messages */}
+        {!chat.isSeen && <div className="unread-dot"></div>}
+    </div>
+))}
+
+
+
 
             {addMode && <Addusers />}
         </div>

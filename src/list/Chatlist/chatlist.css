@@ -70,23 +70,30 @@
             }
         }
     }
+    .unread-dot {
+        width: 12px;
+        height: 12px;
+        background-color: red;
+        border-radius: 50%;
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    .item {
+        position: relative;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    
+    .item:hover {
+        background-color: #3a3a3a; /* Slight hover effect */
+    }
+    
 }
 
-.selection-actions {
-    display: flex;
-    gap: 10px;
-    padding: 10px;
-    background: #f0f0f0;
-}
-
-.selection-actions button {
-    background: red;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    cursor: pointer;
-}
-
-.selection-actions button:last-child {
-    background: gray;
-}

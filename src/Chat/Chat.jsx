@@ -1,71 +1,67 @@
 import "./chat.css"
 import EmojiPicker from "emoji-picker-react"
 import { arrayUnion, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore"
-import {useEffect, useRef , useState} from "react"
+import { useEffect, useRef, useState } from "react"
 import { db } from "../lib/firebase"
 import { useChatStore } from "../lib/chatStore"
 import { useUserStore } from "../lib/userStore"
 import uploadToStorj from "../lib/storj"
-export default function Chat(){
-    const [chat , setChat] = useState()
-    const [open , setOpen] = useState(false)
-    const [text , setText] = useState("")
-    const [img , setImg] = useState({
+
+export default function Chat() {
+    const [chat, setChat] = useState()
+    const [open, setOpen] = useState(false)
+    const [text, setText] = useState("")
+    const [img, setImg] = useState({
         file: null,
         url: "",
     })
 
-    const { chatId , user , isCurrentUserBlocked, isReceiverBlocked} = useChatStore()
-
+    const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore()
     const { currentUser } = useUserStore()
-
     const endRef = useRef(null)
 
     useEffect(() => {
-        endRef.current?.scrollIntoView({behavior: "smooth"})
-    } , [])
+        endRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, [chat?.messages])
+    
 
     useEffect(() => {
         const UnSub = onSnapshot(
-            doc(db , "chats" , chatId ), 
+            doc(db, "chats", chatId),
             (res) => {
                 setChat(res.data())
-        })
+            })
 
-        return () =>{
+        return () => {
             UnSub()
         }
     }, [chatId])
 
-
     useEffect(() => {
-        // Reset chat state when chatId or user changes
-        setChat(null); // Clear the chat messages
-        setText(""); // Clear the input field
-        setImg({ file: null, url: "" }); // Clear the image preview
-    }, [chatId, user]);
-
+        setChat(null)
+        setText("")
+        setImg({ file: null, url: "" })
+    }, [chatId, user])
 
     useEffect(() => {
         if (!chatId) {
-            setChat(null); // Clear chat instantly when logging out
-            return;
+            setChat(null)
+            return
         }
-    
-        const fetchChatData = async () => {
-            const chatDocRef = doc(db, "chats", chatId);
-            const chatDocSnapshot = await getDoc(chatDocRef);
-            if (chatDocSnapshot.exists()) {
-                setChat(chatDocSnapshot.data());
-            }
-        };
-    
-        fetchChatData();
-    }, [chatId]);
-    
 
-    function handleEmoji(e){
-        setText(prev=> prev + e.emoji)
+        const fetchChatData = async () => {
+            const chatDocRef = doc(db, "chats", chatId)
+            const chatDocSnapshot = await getDoc(chatDocRef)
+            if (chatDocSnapshot.exists()) {
+                setChat(chatDocSnapshot.data())
+            }
+        }
+
+        fetchChatData()
+    }, [chatId])
+
+    function handleEmoji(e) {
+        setText(prev => prev + e.emoji)
         setOpen(false)
     }
 
@@ -79,61 +75,63 @@ export default function Chat(){
     }
 
     const handleSend = async () => {
-        if(text === "") return
+        if (text === "") return
 
         let imgUrl = null
 
-        try{
-
-            if(img.file){
+        try {
+            if (img.file) {
                 imgUrl = await uploadToStorj(img.file)
             }
-            await updateDoc(doc(db , "chats" , chatId) , {
+            await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion({
                     senderId: currentUser.id,
                     text,
-                    createdAt: new Date (),
-                    ...(imgUrl && {img: imgUrl}),
+                    createdAt: new Date(),
+                    ...(imgUrl && { img: imgUrl }),
                 })
             })
 
-            const userIDs = [currentUser.id , user.id]
+            const userIDs = [currentUser.id, user.id]
 
             userIDs.forEach(async (id) => {
+                const userChatsRef = doc(db, "userchats", id)
+                const userChatsSnapshot = await getDoc(userChatsRef)
 
-            
+                if (userChatsSnapshot.exists()) {
+                    const userChatsData = userChatsSnapshot.data()
 
-            const userChatsRef = doc(db , "userchats" , id)
-            const userChatsSnapshot = await getDoc(userChatsRef)
+                    const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId)
 
-            if(userChatsSnapshot.exists()){
-                const userChatsData = userChatsSnapshot.data()
+                    userChatsData.chats[chatIndex].lastMessage = text
+                    userChatsData.chats[chatIndex].isSeen = id === currentUser.id ? true : false
+                    userChatsData.chats[chatIndex].updatedAt = Date.now()
 
-                const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId)
-
-                userChatsData.chats[chatIndex].lastMessage = text
-                userChatsData.chats[chatIndex].isSeen = id === currentUser.id ? true : false
-                userChatsData.chats[chatIndex].updatedAt = Date.now()
-
-                await updateDoc(userChatsRef , {
-                    chats: userChatsData.chats,
-                })
-            }
-        })
-    }
-        catch(err){
+                    await updateDoc(userChatsRef, {
+                        chats: userChatsData.chats,
+                    })
+                }
+            })
+        } catch (err) {
             console.log(err)
         }
 
         setImg({
-            file: null, 
+            file: null,
             url: ""
         })
-
         setText("")
     }
 
-    return(
+    // New function to handle Enter key press
+    const handleKeyPress = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault(); // Prevents the default behavior of Enter (line break in the input)
+            handleSend(); // Calls handleSend to send the message
+        }
+    }
+
+    return (
         <div className="chat">
             <div className="top">
                 <div className="user">
@@ -150,46 +148,55 @@ export default function Chat(){
                 </div>
             </div>
             <div className="center">
-                {chat?.messages?.map((message) => (
-                    <div className={message.senderId === currentUser?.id ? "message own" : "message"} key={`${message.senderId}-${message.createdAt}`}>
+                {chat?.messages
+                    ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)) // Sort messages by timestamp
+                    .map((message) => (
+                        <div
+                            className={message.senderId === currentUser?.id ? "message own" : "message"}
+                            key={`${message.senderId}-${message.createdAt}`}
+                        >
+                            <div className="texts">
+                                {message.img && <img src={message.img} alt="" />}
+                                <p>{message.text}</p>
+                            </div>
+                        </div>
+                    ))}
+
+                {img.url && (
+                    <div className="message own">
                         <div className="texts">
-                            {message.img && <img src={message.img} alt="" />}
-                            <p>{message.text}</p>
+                            <img src={img.url} alt="" />
                         </div>
                     </div>
-                ))}
-
-
-                {img.url && ( <div className="message own">
-                    <div className="texts">
-                        <img src={img.url} alt="" />
-                    </div>
-                </div>
                 )}
-            <div ref={endRef}>
+                <div ref={endRef}></div>
+            </div>
 
-            </div>
-            </div>
             <div className="bottom">
                 <div className="icons">
                     <label htmlFor="file">
                         <img src="./img.png" alt="" />
                     </label>
-                    
-                    <input type="file" id = "file" style={{display: "none"}} onChange={handleImg}/>
+                    <input type="file" id="file" style={{ display: "none" }} onChange={handleImg} />
                     <img src="./camera.png" alt="" />
                     <img src="./mic.png" alt="" />
                 </div>
-                <input type="text" placeholder={(isCurrentUserBlocked || isReceiverBlocked) ? "You cannot able to send" : "Type a message..."} onChange={e => setText(e.target.value)} value={text} disabled = {isCurrentUserBlocked || isReceiverBlocked}/>
+                <input
+                    type="text"
+                    placeholder={(isCurrentUserBlocked || isReceiverBlocked) ? "You cannot able to send" : "Type a message..."}
+                    onChange={e => setText(e.target.value)}
+                    value={text}
+                    disabled={isCurrentUserBlocked || isReceiverBlocked}
+                    onKeyPress={handleKeyPress} // Added onKeyPress event handler
+                />
                 <div className="emoji">
-                    <img src="./emoji.png" alt="" onClick={() => setOpen(prev=> !prev)}/>
+                    <img src="./emoji.png" alt="" onClick={() => setOpen(prev => !prev)} />
                     <div className="picker">
-                        <EmojiPicker open = {open} onEmojiClick={handleEmoji}/>
+                        <EmojiPicker open={open} onEmojiClick={handleEmoji} />
                     </div>
-                    
                 </div>
-                <button className="sendButton" onClick={handleSend} disabled = {isCurrentUserBlocked || isReceiverBlocked}>Send</button>
+                <button className="sendButton" onClick={handleSend} disabled={isCurrentUserBlocked || isReceiverBlocked}>Send</button>
             </div>
         </div>
     )
-} 
+}

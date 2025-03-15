@@ -1,34 +1,34 @@
-.login{
+.login {
     width: 100%;
     height: 100%;
     display: flex;
     align-items: center;
     gap: 100px;
 
-    .item{
+    .item {
         flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 20px;
 
-        form{
+        form {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 20px;
 
-            input{
+            input {
                 padding: 20px;
                 border: none;
                 outline: none;
-                background-color: rgba(17 , 25 , 40 , 0.6);
+                background-color: rgba(17, 25, 40, 0.6);
                 color: white;
                 border-radius: 5px;
             }
 
-            label{
+            label {
                 width: 100%;
                 display: flex;
                 align-items: center;
@@ -36,7 +36,7 @@
                 cursor: pointer;
                 text-decoration: underline;
 
-                img{
+                img {
                     width: 50px;
                     height: 50px;
                     border-radius: 10px;
@@ -45,7 +45,7 @@
                 }
             }
 
-            button{
+            button {
                 width: 100%;
                 padding: 20px;
                 border: none;
@@ -55,7 +55,7 @@
                 cursor: pointer;
                 font-weight: 500;
 
-                &:disabled{
+                &:disabled {
                     cursor: not-allowed;
                     background-color: #1f8ff1a2;
                 }
@@ -63,10 +63,123 @@
         }
     }
 
-    .separator{
+    .separator {
         height: 80%;
         width: 2px;
         background-color: #dddddd35;
     }
 
+    .password-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: 100%;
+    }
+
+    .password-container input {
+        flex: 1;
+        padding-right: 40px; /* To make space for the icon */
+    }
+
+    .password-container .show-password-icon {
+        position: absolute;
+        right: 10px;
+        cursor: pointer;
+        font-size: 18px;
+        color: gray;
+    }
+    .res{
+        padding: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 20px 10px 20px 10px;
+        background-color: #1f8ef1;
+        color: white;
+        border: none;
+
+
+    }
+
+    .res:hover{
+        background-color: #76b7f0;
+    }
+    /* Reset Password Section Styling */
+    .reset-password {
+        background-color: #2c3e50;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        position: absolute;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .reset-password h2 {
+        font-size: 24px;
+        color: white;
+        margin-bottom: 20px;
+    }
+
+    .reset-password input {
+        padding: 15px;
+        border-radius: 5px;
+        border: none;
+        outline: none;
+        background-color: rgba(17, 25, 40, 0.6);
+        color: white;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .reset-password button {
+        width: 100%;
+        padding: 15px;
+        border: none;
+        background-color: #1f8ff1a2;
+        color: white;
+        border-radius: 5px;
+        font-weight: 500;
+        cursor: pointer;
+
+        &:disabled {
+            cursor: not-allowed;
+            background-color: #1f8ff1a2;
+        }
+    }
+
+    .reset-password button.cancel {
+        background-color: #1f8ef1;
+    }
+
+    .reset-password button.cancel:hover {
+        background-color: #1f8ff1c0;
+    }
+
+    .reset-password button:hover {
+        background-color: #53a7f0a2;
+    }
+
+    .reset-password input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    /* Forgot Password button styling */
+    .login .item button {
+        background-color: transparent;
+        color: #1f8ef1;
+        text-decoration: underline;
+        font-weight: normal;
+        cursor: pointer;
+    }
+
+    .login .item button:hover {
+        color: #1f8ff1d4;
+    }
 }

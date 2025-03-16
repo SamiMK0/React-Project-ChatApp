@@ -51,6 +51,9 @@
                 width: 20px;
                 height: 20px;
             }
+            #info{
+                cursor: pointer;
+            }
         }
     }
     .center{

@@ -8,7 +8,7 @@ import { useUserStore } from "../lib/userStore";
 import { supabase } from "../lib/supabase"; // Assuming you have supabase set up
 import uploadToStorj from "../lib/storj";
 
-export default function Chat() {
+export default function Chat({ toggleDetails }) {
     const [chat, setChat] = useState();
     const [open, setOpen] = useState(false);
     const [text, setText] = useState("");
@@ -23,6 +23,7 @@ export default function Chat() {
         audioBlob: null,
         url: "",
     });
+    const [showDetails, setShowDetails] = useState(false); // New state for chat details toggle
 
     const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
     const { currentUser } = useUserStore();
@@ -210,9 +211,22 @@ export default function Chat() {
                 <div className="icons">
                     <img src="./phone.png" alt="" />
                     <img src="./video.png" alt="" />
-                    <img src="./info.png" alt="" />
+                    <img src="./info.png" alt="" onClick={toggleDetails} id="info" /> 
                 </div>
             </div>
+
+            {/* Chat Details Section */}
+            {showDetails && (
+                <div className="chat-details">
+                    <h3>Chat Details</h3>
+                    <img src={user?.avatar || "./avatar.png"} alt="User Avatar" />
+                    <p><strong>Username:</strong> {user?.username}</p>
+                    <p><strong>Email:</strong> {user?.email}</p>
+                    <p><strong>Joined:</strong> {new Date(user?.createdAt).toLocaleDateString()}</p>
+                    <button onClick={() => setShowDetails(false)}>Close</button>
+                </div>
+            )}
+
             <div className="center">
                 {chat?.messages
                     ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))

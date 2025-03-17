@@ -29,8 +29,11 @@ export default function Chat({ toggleDetails }) {
     const endRef = useRef(null);
 
     useEffect(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (endRef.current) {
+            endRef.current.scrollIntoView({ behavior: "smooth" });
+        }
     }, [chat?.messages]);
+    
 
     useEffect(() => {
         const UnSub = onSnapshot(
@@ -82,10 +85,78 @@ export default function Chat({ toggleDetails }) {
     }
 
     const formatDate = (timestamp) => {
-        const date = new Date(timestamp);
-        return date.toLocaleDateString(); // Returns a date string in the format 'MM/DD/YYYY'
+        if (!timestamp) return "Invalid Date";
+    
+        let date;
+        if (timestamp.seconds) {
+            date = new Date(timestamp.seconds * 1000);
+        } else {
+            date = new Date(timestamp);
+        }
+    
+        return date.toLocaleDateString();
     };
     
+    
+    const startRecording = () => {
+        if (audio.isRecording) return;
+    
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then((stream) => {
+                const mediaRecorder = new MediaRecorder(stream);
+                const audioChunks = [];
+    
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+    
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+    
+                    setAudio({
+                        isRecording: false,
+                        recorder: null,
+                        stream: null,
+                        audioBlob: audioBlob,
+                        url: audioUrl,
+                    });
+    
+                    // Send the audio message to chat
+                    sendAudioMessage(audioBlob, audioUrl);
+                };
+    
+                mediaRecorder.start();
+                setAudio({ isRecording: true, recorder: mediaRecorder, stream: stream });
+            })
+            .catch((err) => console.error("Error accessing microphone:", err));
+    };
+
+    const stopRecording = () => {
+        if (!audio.isRecording || !audio.recorder) return;
+    
+        audio.recorder.stop();
+        audio.stream.getTracks().forEach(track => track.stop()); // Release the microphone
+    };
+
+    const sendAudioMessage = async (audioBlob, audioUrl) => {
+        try {
+            await updateDoc(doc(db, "chats", chatId), {
+                messages: arrayUnion({
+                    senderId: currentUser.id,
+                    audioUrl: audioUrl,
+                    createdAt: new Date(),
+                }),
+            });
+        } catch (err) {
+            console.error("Error sending audio message:", err);
+        }
+    };
+
+
+
 
     const handleSend = async () => {
         if (text === "") return;
@@ -143,52 +214,7 @@ export default function Chat({ toggleDetails }) {
         }
     };
 
-    const startRecording = () => {
-        if (audio.isRecording) return;
-
-        setAudio((prevState) => ({ ...prevState, isRecording: true }));
-
-        // Get audio stream
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then((stream) => {
-                const mediaRecorder = new MediaRecorder(stream);
-
-                mediaRecorder.ondataavailable = (e) => {
-                    setAudio((prevState) => ({
-                        ...prevState,
-                        audioBlob: e.data,
-                        url: URL.createObjectURL(e.data),
-                    }));
-                };
-
-                mediaRecorder.onstop = () => {
-                    // Handle the audio upload (replace with your upload function)
-                    uploadAudioToSupabase(audio.audioBlob);
-                };
-
-                mediaRecorder.start();
-                setAudio((prevState) => ({
-                    ...prevState,
-                    recorder: mediaRecorder,
-                    stream: stream,
-                }));
-            })
-            .catch((err) => {
-                console.error("Error accessing microphone:", err);
-            });
-    };
-
-    const stopRecording = () => {
-        if (!audio.isRecording) return;
-
-        // Ensure the mediaRecorder is defined before stopping
-        if (audio.recorder && audio.recorder.state === "recording") {
-            audio.recorder.stop();
-            audio.stream.getTracks().forEach((track) => track.stop()); // Stop the tracks to release the microphone
-            setAudio((prevState) => ({ ...prevState, isRecording: false }));
-        }
-    };
-
+    
     // Function to upload the audio to Supabase
     const uploadAudioToSupabase = async (audioBlob) => {
         const file = new File([audioBlob], "audio.webm", { type: "audio/webm" });
@@ -204,9 +230,18 @@ export default function Chat({ toggleDetails }) {
     };
 
     const formatTime = (timestamp) => {
-        const date = new Date(timestamp);
+        if (!timestamp) return "Invalid Date"; // Handle undefined/null cases
+    
+        let date;
+        if (timestamp.seconds) {
+            date = new Date(timestamp.seconds * 1000); // Firestore timestamp format
+        } else {
+            date = new Date(timestamp); // Fallback for regular timestamps
+        }
+    
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
+    
 
     return (
         <div className="chat">
@@ -241,12 +276,9 @@ export default function Chat({ toggleDetails }) {
     {chat?.messages
         ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
         .reduce((acc, message, index, array) => {
-            // Format the current message date
             const currentMessageDate = formatDate(message.createdAt.seconds * 1000);
-            // Check if the current message's date is different from the previous one
             const prevMessageDate = index > 0 ? formatDate(array[index - 1].createdAt.seconds * 1000) : null;
 
-            // If it's a new date, add the date header
             if (currentMessageDate !== prevMessageDate) {
                 acc.push(
                     <div key={`date-${currentMessageDate}`} className="date-header">
@@ -255,27 +287,27 @@ export default function Chat({ toggleDetails }) {
                 );
             }
 
-            // Add the message itself
             acc.push(
-                <div
-                    className={message.senderId === currentUser?.id ? "message own" : "message"}
-                    key={`${message.senderId}-${message.createdAt}`}
-                >
-                    <div className="texts">
-                        {message.img && <img src={message.img} alt="" />}
+                <div className={message.senderId === currentUser?.id ? "message own" : "message"} key={message.createdAt}>
+                <div className="texts">
+                    {message.audioUrl ? (
+                        <audio controls>
+                            <source src={message.audioUrl} type="audio/webm" />
+                            Your browser does not support the audio element.
+                        </audio>
+                    ) : (
                         <p>{message.text}</p>
-                        <span className="timestamp">
-                            {message.createdAt ?
-                                new Date(message.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                : "Invalid date"}
-                        </span>
-                    </div>
+                    )}
+                    <span className="timestamp">{formatTime(message.createdAt)}</span>
                 </div>
+            </div>
             );
 
             return acc;
         }, [])}
+    <div ref={endRef}></div> {/* This ensures the last message is in view */}
 </div>
+
 
 
             <div className="bottom">

@@ -126,7 +126,7 @@ export default function Addusers() {
                     ))}
                 </div>
             ) : (
-                <div>No users found</div>
+                <div></div>
             )}
         </div>
     );

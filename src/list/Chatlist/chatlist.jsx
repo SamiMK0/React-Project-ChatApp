@@ -1,31 +1,31 @@
-import Addusers from "./addusers/Addusers";
-import "./chatlist.css";
-import { useEffect, useState } from "react";
-import { useUserStore } from "../../lib/userStore";
+import { useState, useEffect } from "react";
 import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import { useUserStore } from "../../lib/userStore";
 import { useChatStore } from "../../lib/chatStore";
+import Addusers from "./addusers/Addusers";
+import "./chatlist.css";
 
 export default function Chatlist() {
     const [Chats, SetChats] = useState([]);
     const [addMode, SetAddMode] = useState(false);
     const [input, SetInput] = useState("");
+    const [dropdownOpen, setDropdownOpen] = useState(null); // Track which chat's dropdown is open
+    const [activeArrow, setActiveArrow] = useState(null); // Track which chat's arrow is clicked
 
     const { currentUser } = useUserStore();
-    const { chatId, changeChat } = useChatStore();  // We already have the chatId from store, so we can use it here to track the selected chat.
+    const { chatId, changeChat } = useChatStore();
 
     useEffect(() => {
-        if (!currentUser?.id) return; // Ensure user exists
+        if (!currentUser?.id) return;
 
         const unsub = onSnapshot(doc(db, "userchats", currentUser.id), async (res) => {
             if (!res.exists()) {
-                SetChats([]); // Avoid undefined state
+                SetChats([]);
                 return;
             }
 
             const items = res.data()?.chats || [];
-
-            // Remove duplicate chat IDs
             const uniqueItems = [];
             const chatIds = new Set();
 
@@ -39,7 +39,6 @@ export default function Chatlist() {
             const promises = uniqueItems.map(async (item) => {
                 const userDocRef = doc(db, "users", item.receiverId);
                 const userDocSnap = await getDoc(userDocRef);
-
                 return { ...item, user: userDocSnap.exists() ? userDocSnap.data() : null };
             });
 
@@ -58,23 +57,35 @@ export default function Chatlist() {
 
         const chatIndex = userChats.findIndex((item) => item.chatId === chat.chatId);
 
-        // Update the 'isSeen' property to true
         userChats[chatIndex].isSeen = true;
 
         const userChatsRef = doc(db, "userchats", currentUser.id);
 
         try {
-            await updateDoc(userChatsRef, {
-                chats: userChats,
-            });
-
-            changeChat(chat.chatId, chat.user);  // Pass both chatId and user for handling the selected chat
+            await updateDoc(userChatsRef, { chats: userChats });
+            changeChat(chat.chatId, chat.user);
         } catch (err) {
             console.log(err);
         }
     };
 
-    const filteredChats = Chats.filter(c => c.user.username.toLowerCase().includes(input.toLowerCase()));
+    const handleDeleteChat = async (chatIdToDelete) => {
+        const updatedChats = Chats.filter((chat) => chat.chatId !== chatIdToDelete);
+        SetChats(updatedChats);
+
+        const userChatsRef = doc(db, "userchats", currentUser.id);
+        try {
+            await updateDoc(userChatsRef, {
+                chats: updatedChats.map(({ user, ...rest }) => rest),
+            });
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
+    const filteredChats = Chats.filter((c) =>
+        c.user.username.toLowerCase().includes(input.toLowerCase())
+    );
 
     return (
         <div className="Chatlist">
@@ -96,35 +107,49 @@ export default function Chatlist() {
             </div>
 
             {filteredChats.map((chat) => (
-    <div
-        className="item"
-        key={chat.chatId}
-        onClick={() => handleSelect(chat)}
-        style={{
-            backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a", // Darker background for unread chats
-            borderLeft: chat.isSeen ? "none" : "5px solid red", // Red highlight for unread messages
-        }}
-    >
-        <img
-            src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatar || "./avatar.png"}
-            alt=""
-        />
-        <div className="texts">
-            <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
-                {chat.user.blocked.includes(currentUser.id) ? "User" : chat.user.username}
-            </span>
-            <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
-                {chat.lastMessage}
-            </p>
-        </div>
+                <div
+                    className="item"
+                    key={chat.chatId}
+                    onMouseEnter={() => setDropdownOpen(chat.chatId)}
+                    onMouseLeave={() => setDropdownOpen(null)}
+                    style={{
+                        backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
+                        borderLeft: chat.isSeen ? "none" : "5px solid red",
+                        position: "relative",
+                    }}
+                >
+                    <img
+                        src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatar || "./avatar.png"}
+                        alt=""
+                    />
+                    <div className="texts" onClick={() => handleSelect(chat)}>
+                        <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
+                            {chat.user.blocked.includes(currentUser.id) ? "User" : chat.user.username}
+                        </span>
+                        <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
+                            {chat.lastMessage}
+                        </p>
+                    </div>
 
-        {/* Red dot for unread messages */}
-        {!chat.isSeen && <div className="unread-dot"></div>}
-    </div>
-))}
+                    {/* Red dot for unread messages */}
+                    {!chat.isSeen && <div className="unread-dot"></div>}
 
+                    {/* Arrow Icon - Appears on Hover */}
+                    <div
+                        className="arrow-icon"
+                        onClick={() => setActiveArrow(activeArrow === chat.chatId ? null : chat.chatId)}
+                    >
+                        &#8595; {/* Downward arrow */}
+                    </div>
 
-
+                    {/* Delete Button - Appears After Clicking Arrow */}
+                    {activeArrow === chat.chatId && (
+                        <div className="dropdown">
+                            <button onClick={() => handleDeleteChat(chat.chatId)}>Delete</button>
+                        </div>
+                    )}
+                </div>
+            ))}
 
             {addMode && <Addusers />}
         </div>

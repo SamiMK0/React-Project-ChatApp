@@ -94,6 +94,34 @@
     .item:hover {
         background-color: #3a3a3a; /* Slight hover effect */
     }
-    
+    /* Arrow Icon */
+.arrow-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+/* Dropdown Menu */
+.dropdown {
+    position: absolute;
+    top: 30px; /* Adjust based on your design */
+    right: 10px;
+    background-color: #fff;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
 }
 

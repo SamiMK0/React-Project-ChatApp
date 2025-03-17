@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { db } from "../lib/firebase";
 import { useChatStore } from "../lib/chatStore";
 import { useUserStore } from "../lib/userStore";
-import { supabase } from "../lib/supabase"; // Assuming you have supabase set up
 import uploadToStorj from "../lib/storj";
 
 export default function Chat({ toggleDetails }) {
@@ -81,6 +80,12 @@ export default function Chat({ toggleDetails }) {
             });
         }
     }
+
+    const formatDate = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString(); // Returns a date string in the format 'MM/DD/YYYY'
+    };
+    
 
     const handleSend = async () => {
         if (text === "") return;
@@ -198,6 +203,11 @@ export default function Chat({ toggleDetails }) {
         return data?.path; // Return the file path or URL
     };
 
+    const formatTime = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
         <div className="chat">
             <div className="top">
@@ -211,7 +221,7 @@ export default function Chat({ toggleDetails }) {
                 <div className="icons">
                     <img src="./phone.png" alt="" />
                     <img src="./video.png" alt="" />
-                    <img src="./info.png" alt="" onClick={toggleDetails} id="info" /> 
+                    <img src="./info.png" alt="" onClick={toggleDetails} id="info" />
                 </div>
             </div>
 
@@ -227,37 +237,46 @@ export default function Chat({ toggleDetails }) {
                 </div>
             )}
 
-            <div className="center">
-                {chat?.messages
-                    ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-                    .map((message) => (
-                        <div
-                            className={message.senderId === currentUser?.id ? "message own" : "message"}
-                            key={`${message.senderId}-${message.createdAt}`}
-                        >
-                            <div className="texts">
-                                {message.img && <img src={message.img} alt="" />}
-                                <p>{message.text}</p>
-                            </div>
-                        </div>
-                    ))}
+<div className="center">
+    {chat?.messages
+        ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        .reduce((acc, message, index, array) => {
+            // Format the current message date
+            const currentMessageDate = formatDate(message.createdAt.seconds * 1000);
+            // Check if the current message's date is different from the previous one
+            const prevMessageDate = index > 0 ? formatDate(array[index - 1].createdAt.seconds * 1000) : null;
 
-                {img.url && (
-                    <div className="message own">
-                        <div className="texts">
-                            <img src={img.url} alt="" />
-                        </div>
+            // If it's a new date, add the date header
+            if (currentMessageDate !== prevMessageDate) {
+                acc.push(
+                    <div key={`date-${currentMessageDate}`} className="date-header">
+                        {currentMessageDate}
                     </div>
-                )}
-                {audio.url && (
-                    <div className="message own">
-                        <div className="texts">
-                            <audio controls src={audio.url}></audio>
-                        </div>
+                );
+            }
+
+            // Add the message itself
+            acc.push(
+                <div
+                    className={message.senderId === currentUser?.id ? "message own" : "message"}
+                    key={`${message.senderId}-${message.createdAt}`}
+                >
+                    <div className="texts">
+                        {message.img && <img src={message.img} alt="" />}
+                        <p>{message.text}</p>
+                        <span className="timestamp">
+                            {message.createdAt ?
+                                new Date(message.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : "Invalid date"}
+                        </span>
                     </div>
-                )}
-                <div ref={endRef}></div>
-            </div>
+                </div>
+            );
+
+            return acc;
+        }, [])}
+</div>
+
 
             <div className="bottom">
                 <div className="icons">

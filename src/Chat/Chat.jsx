@@ -6,6 +6,8 @@ import { db } from "../lib/firebase";
 import { useChatStore } from "../lib/chatStore";
 import { useUserStore } from "../lib/userStore";
 import uploadToStorj from "../lib/storj";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import upload from "../lib/upload";
 
 export default function Chat({ toggleDetails }) {
     const [chat, setChat] = useState();
@@ -112,21 +114,19 @@ export default function Chat({ toggleDetails }) {
                     }
                 };
     
-                mediaRecorder.onstop = () => {
+                mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-    
                     setAudio({
                         isRecording: false,
                         recorder: null,
                         stream: null,
                         audioBlob: audioBlob,
-                        url: audioUrl,
+                        url: URL.createObjectURL(audioBlob),
                     });
-    
-                    // Send the audio message to chat
-                    sendAudioMessage(audioBlob, audioUrl);
+                
+                    await sendAudioMessage(audioBlob); // Upload and send message
                 };
+                
     
                 mediaRecorder.start();
                 setAudio({ isRecording: true, recorder: mediaRecorder, stream: stream });
@@ -141,8 +141,17 @@ export default function Chat({ toggleDetails }) {
         audio.stream.getTracks().forEach(track => track.stop()); // Release the microphone
     };
 
-    const sendAudioMessage = async (audioBlob, audioUrl) => {
+    const sendAudioMessage = async (audioBlob) => {
         try {
+            const storage = getStorage();
+            const audioFile = new File([audioBlob], `audio_${Date.now()}.webm`, { type: "audio/webm" });
+            const audioRef = ref(storage, `audio/${audioFile.name}`);
+    
+            // Upload audio file to Firebase Storage
+            await uploadBytes(audioRef, audioFile);
+            const audioUrl = await getDownloadURL(audioRef); // Get the download URL
+    
+            // Save the audio URL to Firestore chat messages
             await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion({
                     senderId: currentUser.id,
@@ -150,10 +159,36 @@ export default function Chat({ toggleDetails }) {
                     createdAt: new Date(),
                 }),
             });
+    
+            // Update last message in userchats collection
+            const userIDs = [currentUser.id, user.id];
+    
+            userIDs.forEach(async (id) => {
+                const userChatsRef = doc(db, "userchats", id);
+                const userChatsSnapshot = await getDoc(userChatsRef);
+    
+                if (userChatsSnapshot.exists()) {
+                    const userChatsData = userChatsSnapshot.data();
+    
+                    const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
+    
+                    if (chatIndex !== -1) {
+                        userChatsData.chats[chatIndex].lastMessage = "🎤 Voice Message"; // Placeholder for voice
+                        userChatsData.chats[chatIndex].isSeen = id === currentUser.id ? true : false;
+                        userChatsData.chats[chatIndex].updatedAt = Date.now();
+    
+                        await updateDoc(userChatsRef, {
+                            chats: userChatsData.chats,
+                        });
+                    }
+                }
+            });
+    
         } catch (err) {
             console.error("Error sending audio message:", err);
         }
     };
+    
 
 
 

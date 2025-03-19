@@ -4,6 +4,7 @@ import { db } from "../../lib/firebase";
 import { useUserStore } from "../../lib/userStore";
 import { useChatStore } from "../../lib/chatStore";
 import Addusers from "./addusers/Addusers";
+import { deleteDoc } from "firebase/firestore";
 import "./chatlist.css";
 
 export default function Chatlist() {
@@ -70,14 +71,19 @@ export default function Chatlist() {
     };
 
     const handleDeleteChat = async (chatIdToDelete) => {
-        const updatedChats = Chats.filter((chat) => chat.chatId !== chatIdToDelete);
-        SetChats(updatedChats);
-
-        const userChatsRef = doc(db, "userchats", currentUser.id);
         try {
+            // Remove chat from user's chat list
+            const updatedChats = Chats.filter((chat) => chat.chatId !== chatIdToDelete);
+            SetChats(updatedChats);
+
+            const userChatsRef = doc(db, "userchats", currentUser.id);
             await updateDoc(userChatsRef, {
                 chats: updatedChats.map(({ user, ...rest }) => rest),
             });
+
+            // Delete chat document from the "chats" collection
+            await deleteDoc(doc(db, "chats", chatIdToDelete));
+
         } catch (err) {
             console.log(err);
         }
@@ -112,10 +118,12 @@ export default function Chatlist() {
                     key={chat.chatId}
                     onMouseEnter={() => setDropdownOpen(chat.chatId)}
                     onMouseLeave={() => setDropdownOpen(null)}
+                    onClick={() => handleSelect(chat)} // Move the click event here
                     style={{
                         backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
                         borderLeft: chat.isSeen ? "none" : "5px solid red",
                         position: "relative",
+                        cursor: "pointer" // Ensures it looks clickable
                     }}
                 >
                     <img

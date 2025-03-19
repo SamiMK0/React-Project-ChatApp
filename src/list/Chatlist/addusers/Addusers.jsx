@@ -45,63 +45,67 @@ export default function Addusers() {
 
     const handleAdd = async (userToAdd) => {
         if (!userToAdd) return;
-
+    
         const chatRef = collection(db, "chats");
         const userChatRef = doc(db, "userchats", currentUser.id);
         const targetUserChatRef = doc(db, "userchats", userToAdd.id);
-
+    
         try {
-            // Fetch current user's chats
+            // Fetch user chat snapshots
             const userChatsSnapshot = await getDoc(userChatRef);
             const targetUserChatsSnapshot = await getDoc(targetUserChatRef);
-
-            if (userChatsSnapshot.exists() && targetUserChatsSnapshot.exists()) {
-                const userChatsData = userChatsSnapshot.data().chats || [];
-                const targetUserChatsData = targetUserChatsSnapshot.data().chats || [];
-
-                // Check if the user is already in the chat list of either user
-                if (
-                    userChatsData.some((chat) => chat.receiverId === userToAdd.id) ||
-                    targetUserChatsData.some((chat) => chat.receiverId === currentUser.id)
-                ) {
+    
+            let existingChat = null;
+    
+            if (userChatsSnapshot.exists()) {
+                existingChat = userChatsSnapshot.data().chats?.find(chat => chat.receiverId === userToAdd.id);
+            }
+    
+            if (existingChat) {
+                // Check if the chat still exists in the "chats" collection
+                const chatExists = await getDoc(doc(db, "chats", existingChat.chatId));
+                if (chatExists.exists()) {
                     setMessage("This user is already in your chat list.");
                     return;
                 }
             }
-
-            // Create a new chat
+    
+            // Create a new chat if none exists
             const newChatRef = doc(chatRef);
             await setDoc(newChatRef, {
                 createdAt: serverTimestamp(),
                 messages: []
             });
-
+    
             // Update user chat lists
             await updateDoc(userChatRef, {
                 chats: arrayUnion({
                     chatId: newChatRef.id,
                     lastMessage: "",
                     receiverId: userToAdd.id,
-                    updatedAt: Date.now()
+                    updatedAt: Date.now(),
+                    isSeen: true // Ensure new chat is marked as seen
                 }),
             });
-
+    
             await updateDoc(targetUserChatRef, {
                 chats: arrayUnion({
                     chatId: newChatRef.id,
                     lastMessage: "",
                     receiverId: currentUser.id,
-                    updatedAt: Date.now()
+                    updatedAt: Date.now(),
+                    isSeen: true
                 }),
             });
-
+            
+    
             setMessage("User added successfully!");
         } catch (err) {
             console.log(err);
             setMessage("Error occurred while adding the user. Please try again.");
         }
     };
-
+    
     return (
         <div className="Addusers">
             <form onSubmit={handleSearch}>

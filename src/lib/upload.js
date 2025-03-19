@@ -34,10 +34,11 @@
 
 
 
-import uploadToStorj from "./storj";
+// import uploadToStorj from "./storj";
 
-const upload = async (file) => {
-    return await uploadToStorj(file);
+const upload = async () => {
+    
 };
 
 export default upload;
+

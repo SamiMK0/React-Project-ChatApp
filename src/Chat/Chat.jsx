@@ -29,6 +29,38 @@ export default function Chat({ toggleDetails }) {
     const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
     const { currentUser } = useUserStore();
     const endRef = useRef(null);
+    const [menuOpen, setMenuOpen] = useState(null);
+
+const toggleMenu = (messageId) => {
+    setMenuOpen(menuOpen === messageId ? null : messageId);
+};
+
+const deleteMessage = async (messageId) => {
+    try {
+        // Check if the chatId and messageId are valid
+        if (!chatId || !messageId) return;
+
+        // Filter out the message from the chat state
+        const updatedMessages = chat.messages.filter((msg) => msg.createdAt.seconds !== messageId.seconds); // Compare by seconds if createdAt is a timestamp
+
+        // Update Firestore by overwriting the messages array
+        await updateDoc(doc(db, "chats", chatId), {
+            messages: updatedMessages,
+        });
+
+        // Update the state with the updated messages
+        setChat((prevChat) => ({
+            ...prevChat,
+            messages: updatedMessages,
+        }));
+
+        // Close the menu after deleting
+        setMenuOpen(null);
+    } catch (error) {
+        console.error("Error deleting message:", error);
+    }
+};
+
 
     useEffect(() => {
         if (endRef.current) {
@@ -323,25 +355,42 @@ export default function Chat({ toggleDetails }) {
             }
 
             acc.push(
-                <div className={message.senderId === currentUser?.id ? "message own" : "message"} key={message.createdAt}>
-                <div className="texts">
-                    {message.audioUrl ? (
-                        <audio controls>
-                            <source src={message.audioUrl} type="audio/webm" />
-                            Your browser does not support the audio element.
-                        </audio>
-                    ) : (
-                        <p>{message.text}</p>
-                    )}
-                    <span className="timestamp">{formatTime(message.createdAt)}</span>
+                <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}>
+                    <div className="texts">
+                        {message.audioUrl ? (
+                            <audio controls>
+                                <source src={message.audioUrl} type="audio/webm" />
+                                Your browser does not support the audio element.
+                            </audio>
+                        ) : (
+                            <p>{message.text}</p>
+                        )}
+                        <div className="message-footer">
+                            <span className="timestamp">{formatTime(message.createdAt)}</span>
+                            
+                            {/* Three-dot menu inside message box */}
+                            <div className="menu-container">
+                                <button onClick={() => toggleMenu(message.createdAt)} className="menu-button">
+                                    ⋮
+                                </button>
+
+                                {menuOpen === message.createdAt && (
+                                    <div className="menu-dropdown">
+                                        <button onClick={() => deleteMessage(message.createdAt)}>Delete</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
             );
 
             return acc;
         }, [])}
-    <div ref={endRef}></div> {/* This ensures the last message is in view */}
+    <div ref={endRef}></div>
 </div>
+
+
 
 
 

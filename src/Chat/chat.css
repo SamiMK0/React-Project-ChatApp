@@ -73,7 +73,8 @@
                 align-self: flex-end;
                 .texts{
                     p{
-                        background-color: #5183fe;
+                        background-color:#dcf8c6;
+                        color: black;
                     }
                 }
             }
@@ -194,3 +195,83 @@
     
     
 }
+.message {
+    display: flex;
+    justify-content: flex-start;
+    max-width: 70%; /* Reduced width for a more compact message */
+    padding: 8px 12px; /* Reduced padding for smaller messages */
+    margin: 6px 0; /* Reduced margin to make it tighter */
+    border-radius: 8px;
+    position: relative;
+    background-color: #f1f1f1;
+    word-wrap: break-word;
+    font-size: 14px; /* Slightly smaller font for better fit */
+}
+
+.own {
+    align-self: flex-end;
+    background-color: #dcf8c6;
+}
+
+.texts {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 5px;
+    font-size: 12px;
+    color: #666;
+}
+
+.timestamp {
+    flex-grow: 1;
+}
+
+.menu-container {
+    position: relative;
+    display: inline-block;
+}
+
+.menu-button {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 5px;
+    margin-left: 5px;
+    color: #555;
+}
+
+.menu-dropdown {
+    position: absolute;
+    right: 0;
+    top: 20px;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+    padding: 5px 0;
+    min-width: 80px;
+}
+
+.menu-dropdown button {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.menu-dropdown button:hover {
+    background: #f5f5f5;
+}
+

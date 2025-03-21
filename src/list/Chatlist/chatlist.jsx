@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { useUserStore } from "../../lib/userStore";
 import { useChatStore } from "../../lib/chatStore";
 import Addusers from "./addusers/Addusers";
-import { deleteDoc } from "firebase/firestore";
 import "./chatlist.css";
 
 export default function Chatlist() {
@@ -71,21 +70,48 @@ export default function Chatlist() {
     };
 
     const handleDeleteChat = async (chatIdToDelete) => {
+        if (!currentUser?.id) return;
+    
+        // Remove chat from the user's userchats collection
+        const userChatsRef = doc(db, "userchats", currentUser.id);
+        
+        // Remove chat from UI
+        const updatedChats = Chats.filter((chat) => chat.chatId !== chatIdToDelete);
+        SetChats(updatedChats);
+    
         try {
-            // Remove chat from user's chat list
-            const updatedChats = Chats.filter((chat) => chat.chatId !== chatIdToDelete);
-            SetChats(updatedChats);
-
-            const userChatsRef = doc(db, "userchats", currentUser.id);
-            await updateDoc(userChatsRef, {
-                chats: updatedChats.map(({ user, ...rest }) => rest),
-            });
-
-            // Delete chat document from the "chats" collection
-            await deleteDoc(doc(db, "chats", chatIdToDelete));
-
+            // Get current user's chat list and update it
+            const userChatsSnap = await getDoc(userChatsRef);
+            if (userChatsSnap.exists()) {
+                const userChats = userChatsSnap.data().chats || [];
+                const newChats = userChats.filter(chat => chat.chatId !== chatIdToDelete);
+    
+                await updateDoc(userChatsRef, { chats: newChats });
+            }
+    
+            // Get receiver's ID (to also remove the chat from their list)
+            const chatToDelete = Chats.find(chat => chat.chatId === chatIdToDelete);
+            if (!chatToDelete) return;
+            
+            const receiverId = chatToDelete.receiverId;
+            if (receiverId) {
+                const receiverChatsRef = doc(db, "userchats", receiverId);
+                const receiverChatsSnap = await getDoc(receiverChatsRef);
+    
+                if (receiverChatsSnap.exists()) {
+                    const receiverChats = receiverChatsSnap.data().chats || [];
+                    const newReceiverChats = receiverChats.filter(chat => chat.chatId !== chatIdToDelete);
+    
+                    await updateDoc(receiverChatsRef, { chats: newReceiverChats });
+                }
+            }
+    
+            // Delete the actual chat document from the "chats" collection
+            const chatDocRef = doc(db, "chats", chatIdToDelete);
+            await deleteDoc(chatDocRef);
+    
         } catch (err) {
-            console.log(err);
+            console.log("Error deleting chat:", err);
         }
     };
 
@@ -118,21 +144,20 @@ export default function Chatlist() {
                     key={chat.chatId}
                     onMouseEnter={() => setDropdownOpen(chat.chatId)}
                     onMouseLeave={() => setDropdownOpen(null)}
-                    onClick={() => handleSelect(chat)} // Move the click event here
+                    onClick={() => handleSelect(chat)}
                     style={{
                         backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
                         borderLeft: chat.isSeen ? "none" : "5px solid red",
                         position: "relative",
-                        cursor: "pointer" // Ensures it looks clickable
                     }}
                 >
                     <img
-                        src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatar || "./avatar.png"}
+                        src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatarUrl || "./avatar.png"}
                         alt=""
                     />
-                    <div className="texts" onClick={() => handleSelect(chat)}>
+                    <div className="texts" >
                         <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
-                            {chat.user.blocked.includes(currentUser.id) ? "User" : chat.user.username}
+                            {chat.user?.blocked?.includes(currentUser.id) ? "User" : chat.user?.username}
                         </span>
                         <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
                             {chat.lastMessage}
@@ -153,7 +178,8 @@ export default function Chatlist() {
                     {/* Delete Button - Appears After Clicking Arrow */}
                     {activeArrow === chat.chatId && (
                         <div className="dropdown">
-                            <button onClick={() => handleDeleteChat(chat.chatId)}>Delete</button>
+                            
+                            <button onClick={(e) => {e.stopPropagation(); handleDeleteChat(chat.chatId)}}>Delete</button>
                         </div>
                     )}
                 </div>

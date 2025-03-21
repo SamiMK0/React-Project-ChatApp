@@ -43,57 +43,51 @@ export default function Login() {
         const formData = new FormData(e.target);
         let { username, email, password } = Object.fromEntries(formData);
     
-        // Ensure username is lowercase
-        username = username.trim().toLowerCase();
-
+        username = username.trim().toLowerCase(); // Normalize username
+    
         try {
-            // Check if username exists in Firestore
+            // Check if username exists
             const q = query(collection(db, "users"), where("usernameLower", "==", username));
             const querySnapshot = await getDocs(q);
     
             if (!querySnapshot.empty) {
                 toast.error("Username is already taken. Choose another one.");
                 setLoading(false);
-                return; // Stop registration if username exists
+                return;
             }
     
-            // Create user in Firebase Authentication
+            // Create user
             const res = await createUserWithEmailAndPassword(auth, email, password);
+            const userId = res.user.uid;
+            let avatarUrl = "";
     
-            // Upload avatar to Firebase Storage if available
+            // Upload avatar if selected
             if (avatar.file) {
                 const storage = getStorage();
-                const avatarRef = ref(storage, `avatars/${res.user.uid}`);
+                const avatarRef = ref(storage, `avatars/${userId}`);
                 const uploadTask = uploadBytesResumable(avatarRef, avatar.file);
-                await uploadTask;
-                const avatarUrl = await getDownloadURL(avatarRef);
-
-                // Store user details in Firestore with avatar URL
-                await setDoc(doc(db, "users", res.user.uid), {
-                    username,
-                    usernameLower: username,
-                    email,
-                    avatarUrl, // Save the avatar URL
-                    id: res.user.uid,
-                    blocked: [],
-                });
-            } else {
-                // If no avatar, store details without avatar URL
-                await setDoc(doc(db, "users", res.user.uid), {
-                    username,
-                    usernameLower: username,
-                    email,
-                    id: res.user.uid,
-                    blocked: [],
-                });
-            }
-
-            // Create user chat document
-            await setDoc(doc(db, "userchats", res.user.uid), { chats: [] });
     
-            // Sign out the user immediately after registration
+                await uploadTask;
+                avatarUrl = await getDownloadURL(avatarRef);
+            }
+    
+            // Save user details in Firestore
+            await setDoc(doc(db, "users", userId), {
+                username,
+                usernameLower: username,
+                email,
+                avatarUrl, // Store avatar URL
+                id: userId,
+                blocked: [],
+            });
+    
+            // Create user chat document
+            await setDoc(doc(db, "userchats", userId), { chats: [] });
             await signOut(auth);
             toast.success("Account Created! Please sign in to continue.");
+
+            e.target.reset();  // Clears the form
+            setAvatar({ file: null, url: "", base64: "" }); // Clears avatar
         } catch (err) {
             console.log(err);
             toast.error(err.message);
@@ -101,7 +95,7 @@ export default function Login() {
             setLoading(false);
         }
     };
-
+    
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);

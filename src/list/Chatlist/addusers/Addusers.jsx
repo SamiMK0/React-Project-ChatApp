@@ -122,7 +122,7 @@ export default function Addusers() {
                     {users.map((userItem, index) => (
                         <div key={index} className="user">
                             <div className="detail">
-                                <img src={userItem.avatar || "./avatar.png"} alt="" />
+                                <img src={userItem.avatarUrl || "./avatar.png"} alt="" />
                                 <span>{userItem.username}</span>
                             </div>
                             <button onClick={() => handleAdd(userItem)}>Add User</button>

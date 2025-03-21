@@ -53,7 +53,7 @@ export default function Detail() {
     return (
         <div className="detail">
             <div className="user">
-                <img src={user?.avatar || "./avatar.png"} alt="" />
+                <img src={user?.avatarUrl || "./avatar.png"} alt="" />
                 <h2>{user?.username}</h2>
                 <p>{chatData?.lastMessage || "No messages yet."}</p> {/* Example: showing latest message from chat */}
             </div>

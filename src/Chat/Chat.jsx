@@ -5,9 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { db } from "../lib/firebase";
 import { useChatStore } from "../lib/chatStore";
 import { useUserStore } from "../lib/userStore";
-import uploadToStorj from "../lib/storj";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import upload from "../lib/upload";
 
 export default function Chat({ toggleDetails }) {
     const [chat, setChat] = useState();
@@ -113,10 +111,11 @@ const deleteMessage = async (messageId) => {
         if (e.target.files[0]) {
             setImg({
                 file: e.target.files[0],
-                url: URL.createObjectURL(e.target.files[0]),
+                url: URL.createObjectURL(e.target.files[0]), // Preview before uploading
             });
         }
     }
+    
 
     const formatDate = (timestamp) => {
         if (!timestamp) return "Invalid Date";
@@ -221,79 +220,68 @@ const deleteMessage = async (messageId) => {
         }
     };
     
-
-
-
-
     const handleSend = async () => {
-        if (text === "") return;
-
+        if (text === "" && !img.file) return;
+    
         let imgUrl = null;
-
+    
         try {
             if (img.file) {
-                imgUrl = await uploadToStorj(img.file);
+                const storage = getStorage();
+                const imgRef = ref(storage, `images/${Date.now()}_${img.file.name}`);
+    
+                // Upload the file to Firebase Storage
+                await uploadBytes(imgRef, img.file);
+    
+                // Get the download URL
+                imgUrl = await getDownloadURL(imgRef);
             }
+    
+            // Send message with text and/or image
             await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion({
                     senderId: currentUser.id,
                     text,
                     createdAt: new Date(),
-                    ...(imgUrl && { img: imgUrl }),
+                    ...(imgUrl && { img: imgUrl }), // Include img URL only if available
                 }),
             });
-
+    
+            // Update last message in user chats
             const userIDs = [currentUser.id, user.id];
-
             userIDs.forEach(async (id) => {
                 const userChatsRef = doc(db, "userchats", id);
                 const userChatsSnapshot = await getDoc(userChatsRef);
-
+    
                 if (userChatsSnapshot.exists()) {
                     const userChatsData = userChatsSnapshot.data();
-
+    
                     const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
-
-                    userChatsData.chats[chatIndex].lastMessage = text;
-                    userChatsData.chats[chatIndex].isSeen = id === currentUser.id ? true : false;
-                    userChatsData.chats[chatIndex].updatedAt = Date.now();
-
-                    await updateDoc(userChatsRef, {
-                        chats: userChatsData.chats,
-                    });
+    
+                    if (chatIndex !== -1) {
+                        userChatsData.chats[chatIndex].lastMessage = text || "📷 Image";
+                        userChatsData.chats[chatIndex].isSeen = id === currentUser.id;
+                        userChatsData.chats[chatIndex].updatedAt = Date.now();
+    
+                        await updateDoc(userChatsRef, { chats: userChatsData.chats });
+                    }
                 }
             });
         } catch (err) {
-            console.log(err);
+            console.error("Error sending message:", err);
         }
-
-        setImg({
-            file: null,
-            url: "",
-        });
+    
+        // Reset input fields
+        setImg({ file: null, url: "" });
         setText("");
     };
+    
 
     const handleKeyPress = (e) => {
         if (e.key === "Enter") {
             e.preventDefault();
             handleSend();
         }
-    };
-
-    
-    // Function to upload the audio to Supabase
-    const uploadAudioToSupabase = async (audioBlob) => {
-        const file = new File([audioBlob], "audio.webm", { type: "audio/webm" });
-        const { data, error } = await supabase.storage
-            .from("audio-bucket") // Assuming you're storing in a bucket called "audio-bucket"
-            .upload("audio-recordings/" + Date.now() + ".webm", file);
-
-        if (error) {
-            console.error("Error uploading audio:", error);
-            return null;
-        }
-        return data?.path; // Return the file path or URL
     };
 
     const formatTime = (timestamp) => {
@@ -314,7 +302,7 @@ const deleteMessage = async (messageId) => {
         <div className="chat">
             <div className="top">
                 <div className="user">
-                    <img src={user?.avatar || "./avatar.png"} alt="" />
+                    <img src={user?.avatarUrl || "./avatar.png"} alt="" />
                     <div className="texts">
                         <span>{user?.username}</span>
                         <p>Lorem ipsum dolor sit, amet?</p>
@@ -357,6 +345,7 @@ const deleteMessage = async (messageId) => {
             acc.push(
                 <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}>
                     <div className="texts">
+                        {message.img && <img src={message.img} alt="Sent Image" className="sent-image" />}
                         {message.audioUrl ? (
                             <audio controls>
                                 <source src={message.audioUrl} type="audio/webm" />
@@ -388,11 +377,7 @@ const deleteMessage = async (messageId) => {
             return acc;
         }, [])}
     <div ref={endRef}></div>
-</div>
-
-
-
-
+    </div>
 
             <div className="bottom">
                 <div className="icons">

@@ -156,7 +156,7 @@ const deleteMessage = async (messageId) => {
                     });
                 
                     await sendAudioMessage(audioBlob); // Upload and send message
-                };
+                }; 
                 
     
                 mediaRecorder.start();

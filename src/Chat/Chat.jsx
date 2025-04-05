@@ -29,35 +29,67 @@ export default function Chat({ toggleDetails }) {
     const endRef = useRef(null);
     const [menuOpen, setMenuOpen] = useState(null);
 
-const toggleMenu = (messageId) => {
-    setMenuOpen(menuOpen === messageId ? null : messageId);
-};
+    const toggleMenu = (messageId) => {
+        setMenuOpen(menuOpen === messageId ? null : messageId);
+    };
 
-const deleteMessage = async (messageId) => {
-    try {
-        // Check if the chatId and messageId are valid
-        if (!chatId || !messageId) return;
+    const deleteMessage = async (messageId) => {
+        try {
+            if (!chatId || !messageId) return;
 
-        // Filter out the message from the chat state
-        const updatedMessages = chat.messages.filter((msg) => msg.createdAt.seconds !== messageId.seconds); // Compare by seconds if createdAt is a timestamp
+            // Filter out the deleted message
+            const updatedMessages = chat.messages.filter(
+                (msg) => msg.createdAt.seconds !== messageId.seconds
+            );
 
-        // Update Firestore by overwriting the messages array
-        await updateDoc(doc(db, "chats", chatId), {
-            messages: updatedMessages,
-        });
+            // Update the chat messages in Firestore
+            await updateDoc(doc(db, "chats", chatId), {
+                messages: updatedMessages,
+            });
 
-        // Update the state with the updated messages
-        setChat((prevChat) => ({
-            ...prevChat,
-            messages: updatedMessages,
-        }));
+            // Update userchats for both users
+            const updateLastMessageForUser = async (userId) => {
+                const userChatsRef = doc(db, "userchats", userId);
+                const userChatsSnap = await getDoc(userChatsRef);
+                if (userChatsSnap.exists()) {
+                    const userChatsData = userChatsSnap.data();
+                    const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
+                    if (chatIndex !== -1) {
+                        const newLastMessage = updatedMessages.length > 0
+                            ? updatedMessages[updatedMessages.length - 1]
+                            : null;
 
-        // Close the menu after deleting
-        setMenuOpen(null);
-    } catch (error) {
-        console.error("Error deleting message:", error);
-    }
-};
+                        userChatsData.chats[chatIndex].lastMessage = newLastMessage?.text
+                            || (newLastMessage?.img && "📷 Image")
+                            || (newLastMessage?.audioUrl && "🎤 Voice Message")
+                            || "";
+
+                        userChatsData.chats[chatIndex].updatedAt = Date.now();
+
+                        await updateDoc(userChatsRef, {
+                            chats: userChatsData.chats,
+                        });
+                    }
+                }
+            };
+
+            // Update both users
+            await Promise.all([
+                updateLastMessageForUser(currentUser.id),
+                updateLastMessageForUser(user.id),
+            ]);
+
+            // Update state
+            setChat((prevChat) => ({
+                ...prevChat,
+                messages: updatedMessages,
+            }));
+
+            setMenuOpen(null);
+        } catch (error) {
+            console.error("Error deleting message:", error);
+        }
+    };
 
 
     useEffect(() => {
@@ -65,7 +97,7 @@ const deleteMessage = async (messageId) => {
             endRef.current.scrollIntoView({ behavior: "smooth" });
         }
     }, [chat?.messages]);
-    
+
 
     useEffect(() => {
         const UnSub = onSnapshot(
@@ -115,36 +147,36 @@ const deleteMessage = async (messageId) => {
             });
         }
     }
-    
+
 
     const formatDate = (timestamp) => {
         if (!timestamp) return "Invalid Date";
-    
+
         let date;
         if (timestamp.seconds) {
             date = new Date(timestamp.seconds * 1000);
         } else {
             date = new Date(timestamp);
         }
-    
+
         return date.toLocaleDateString();
     };
-    
-    
+
+
     const startRecording = () => {
         if (audio.isRecording) return;
-    
+
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then((stream) => {
                 const mediaRecorder = new MediaRecorder(stream);
                 const audioChunks = [];
-    
+
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
                     }
                 };
-    
+
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
                     setAudio({
@@ -154,11 +186,11 @@ const deleteMessage = async (messageId) => {
                         audioBlob: audioBlob,
                         url: URL.createObjectURL(audioBlob),
                     });
-                
+
                     await sendAudioMessage(audioBlob); // Upload and send message
-                }; 
-                
-    
+                };
+
+
                 mediaRecorder.start();
                 setAudio({ isRecording: true, recorder: mediaRecorder, stream: stream });
             })
@@ -167,7 +199,7 @@ const deleteMessage = async (messageId) => {
 
     const stopRecording = () => {
         if (!audio.isRecording || !audio.recorder) return;
-    
+
         audio.recorder.stop();
         audio.stream.getTracks().forEach(track => track.stop()); // Release the microphone
     };
@@ -177,11 +209,11 @@ const deleteMessage = async (messageId) => {
             const storage = getStorage();
             const audioFile = new File([audioBlob], `audio_${Date.now()}.webm`, { type: "audio/webm" });
             const audioRef = ref(storage, `audio/${audioFile.name}`);
-    
+
             // Upload audio file to Firebase Storage
             await uploadBytes(audioRef, audioFile);
             const audioUrl = await getDownloadURL(audioRef); // Get the download URL
-    
+
             // Save the audio URL to Firestore chat messages
             await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion({
@@ -190,53 +222,53 @@ const deleteMessage = async (messageId) => {
                     createdAt: new Date(),
                 }),
             });
-    
+
             // Update last message in userchats collection
             const userIDs = [currentUser.id, user.id];
-    
+
             userIDs.forEach(async (id) => {
                 const userChatsRef = doc(db, "userchats", id);
                 const userChatsSnapshot = await getDoc(userChatsRef);
-    
+
                 if (userChatsSnapshot.exists()) {
                     const userChatsData = userChatsSnapshot.data();
-    
+
                     const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
-    
+
                     if (chatIndex !== -1) {
                         userChatsData.chats[chatIndex].lastMessage = "🎤 Voice Message"; // Placeholder for voice
                         userChatsData.chats[chatIndex].isSeen = id === currentUser.id ? true : false;
                         userChatsData.chats[chatIndex].updatedAt = Date.now();
-    
+
                         await updateDoc(userChatsRef, {
                             chats: userChatsData.chats,
                         });
                     }
                 }
             });
-    
+
         } catch (err) {
             console.error("Error sending audio message:", err);
         }
     };
-    
+
     const handleSend = async () => {
         if (text === "" && !img.file) return;
-    
+
         let imgUrl = null;
-    
+
         try {
             if (img.file) {
                 const storage = getStorage();
                 const imgRef = ref(storage, `images/${Date.now()}_${img.file.name}`);
-    
+
                 // Upload the file to Firebase Storage
                 await uploadBytes(imgRef, img.file);
-    
+
                 // Get the download URL
                 imgUrl = await getDownloadURL(imgRef);
             }
-    
+
             // Send message with text and/or image
             await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion({
@@ -246,23 +278,23 @@ const deleteMessage = async (messageId) => {
                     ...(imgUrl && { img: imgUrl }), // Include img URL only if available
                 }),
             });
-    
+
             // Update last message in user chats
             const userIDs = [currentUser.id, user.id];
             userIDs.forEach(async (id) => {
                 const userChatsRef = doc(db, "userchats", id);
                 const userChatsSnapshot = await getDoc(userChatsRef);
-    
+
                 if (userChatsSnapshot.exists()) {
                     const userChatsData = userChatsSnapshot.data();
-    
+
                     const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
-    
+
                     if (chatIndex !== -1) {
                         userChatsData.chats[chatIndex].lastMessage = text || "📷 Image";
                         userChatsData.chats[chatIndex].isSeen = id === currentUser.id;
                         userChatsData.chats[chatIndex].updatedAt = Date.now();
-    
+
                         await updateDoc(userChatsRef, { chats: userChatsData.chats });
                     }
                 }
@@ -270,12 +302,12 @@ const deleteMessage = async (messageId) => {
         } catch (err) {
             console.error("Error sending message:", err);
         }
-    
+
         // Reset input fields
         setImg({ file: null, url: "" });
         setText("");
     };
-    
+
 
     const handleKeyPress = (e) => {
         if (e.key === "Enter") {
@@ -286,17 +318,18 @@ const deleteMessage = async (messageId) => {
 
     const formatTime = (timestamp) => {
         if (!timestamp) return "Invalid Date"; // Handle undefined/null cases
-    
+
         let date;
         if (timestamp.seconds) {
             date = new Date(timestamp.seconds * 1000); // Firestore timestamp format
         } else {
             date = new Date(timestamp); // Fallback for regular timestamps
         }
-    
+
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
-    
+
+
 
     return (
         <div className="chat">
@@ -327,57 +360,71 @@ const deleteMessage = async (messageId) => {
                 </div>
             )}
 
-<div className="center">
-    {chat?.messages
-        ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        .reduce((acc, message, index, array) => {
-            const currentMessageDate = formatDate(message.createdAt.seconds * 1000);
-            const prevMessageDate = index > 0 ? formatDate(array[index - 1].createdAt.seconds * 1000) : null;
+            <div className="center">
+                {chat?.messages
+                    ?.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                    .reduce((acc, message, index, array) => {
+                        const currentMessageDate = formatDate(message.createdAt.seconds * 1000);
+                        const prevMessageDate = index > 0 ? formatDate(array[index - 1].createdAt.seconds * 1000) : null;
 
-            if (currentMessageDate !== prevMessageDate) {
-                acc.push(
-                    <div key={`date-${currentMessageDate}`} className="date-header">
-                        {currentMessageDate}
-                    </div>
-                );
-            }
+                        if (currentMessageDate !== prevMessageDate) {
+                            acc.push(
+                                <div key={`date-${currentMessageDate}`} className="date-header">
+                                    {currentMessageDate}
+                                </div>
+                            );
+                        }
 
-            acc.push(
-                <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}>
-                    <div className="texts">
-                        {message.img && <img src={message.img} alt="Sent Image" className="sent-image" />}
-                        {message.audioUrl ? (
-                            <audio controls>
-                                <source src={message.audioUrl} type="audio/webm" />
-                                Your browser does not support the audio element.
-                            </audio>
-                        ) : (
-                            <p>{message.text}</p>
-                        )}
-                        <div className="message-footer">
-                            <span className="timestamp">{formatTime(message.createdAt)}</span>
-                            
-                            {/* Three-dot menu inside message box */}
-                            <div className="menu-container">
-                                <button onClick={() => toggleMenu(message.createdAt)} className="menu-button">
-                                    ⋮
-                                </button>
+                        acc.push(
+                            <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}>
+                                <div className="texts">
+                                    {message.img && (
+                                        <div className="message-image-container">
+                                            <img src={message.img} alt="Sent Image" className="sent-image" />
+                                            <a href={message.img} download={`image_${Date.now()}.jpg`} className="download-button">
+    📥
+</a>
+                                        </div>
+                                    )}
+                                    {message.audioUrl ? (
+                                        <audio controls>
+                                            <source src={message.audioUrl} type="audio/webm" />
+                                            Your browser does not support the audio element.
+                                        </audio>
+                                    ) : (
+                                        <p>{message.text}</p>
+                                    )}
+                                    <div className="message-footer">
+                                        <span className="timestamp">{formatTime(message.createdAt)}</span>
+                                        <div className="relative inline-block text-left">
+                                            <button
+                                                onClick={() => toggleMenu(message.createdAt)}
+                                                className="menu-button"
+                                            >
+                                                ⋮
+                                            </button>
 
-                                {menuOpen === message.createdAt && (
-                                    <div className="menu-dropdown">
-                                        <button onClick={() => deleteMessage(message.createdAt)}>Delete</button>
+                                            {menuOpen === message.createdAt && (
+                                                <div className="dropdown-menu animate-fade-in">
+                                                    <button
+                                                        onClick={() => deleteMessage(message.createdAt)}
+                                                        className="delete-button"
+                                                    >
+                                                        🗑
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            );
 
-            return acc;
-        }, [])}
-    <div ref={endRef}></div>
-    </div>
+                        );
+
+                        return acc;
+                    }, [])}
+                <div ref={endRef}></div>
+            </div>
 
             <div className="bottom">
                 <div className="icons">

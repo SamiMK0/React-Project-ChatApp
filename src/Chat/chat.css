@@ -324,3 +324,145 @@
     margin-left: 8px;
     font-size: 12px;
 }
+
+
+.camera-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.camera-video {
+    width: 100%;
+    max-width: 500px;
+    max-height: 70vh;
+    background: #000;
+}
+
+.camera-buttons {
+    margin-top: 20px;
+    display: flex;
+    gap: 20px;
+}
+
+.camera-buttons button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.camera-buttons button:first-child {
+    background: #4CAF50;
+    color: white;
+}
+
+.camera-buttons button:last-child {
+    background: #f44336;
+    color: white;
+}
+
+
+.camera-loading {
+    color: white;
+    margin-top: 20px;
+    font-size: 1.2rem;
+}
+
+.camera-buttons button:disabled {
+    background: #cccccc !important;
+    cursor: not-allowed;
+}
+
+
+/* Camera styles */
+.camera-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .camera-video {
+    width: 100%;
+    max-width: 500px;
+    background: #000;
+    border-radius: 8px;
+  }
+  
+  .camera-buttons {
+    margin-top: 20px;
+    display: flex;
+    gap: 15px;
+  }
+  
+  .camera-buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  
+  .camera-error {
+    color: white;
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .loading-spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 4px solid white;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+
+  .debug-info {
+    font-size: 0.8rem;
+    color: #aaa;
+    margin-top: 10px;
+  }
+  
+  .debug-tip {
+    font-size: 0.9rem;
+    color: #ccc;
+    margin-top: 15px;
+    max-width: 300px;
+    text-align: center;
+  }
+
+
+  .recording-icon {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}

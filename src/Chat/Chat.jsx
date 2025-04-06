@@ -330,6 +330,174 @@ export default function Chat({ toggleDetails }) {
     };
 
 
+    // Add this function to your component
+const handleDownload = async (storageUrl) => {
+    try {
+        // Extract the path from the full URL
+        const path = new URL(storageUrl).pathname;
+        const storagePath = path.split('/o/')[1].split('?')[0];
+        
+        const storage = getStorage();
+        const fileRef = ref(storage, decodeURIComponent(storagePath));
+        
+        // Get download URL
+        const url = await getDownloadURL(fileRef);
+        
+        // Create temporary link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `image_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error('Download failed:', error);
+    }
+};
+
+
+const [showCamera, setShowCamera] = useState(false);
+const videoRef = useRef(null);
+const canvasRef = useRef(null);
+const [stream, setStream] = useState(null);
+const [isCameraReady, setIsCameraReady] = useState(false);
+const [cameraError, setCameraError] = useState(null);
+const [isInitializing, setIsInitializing] = useState(false);
+
+const openCamera = async () => {
+    setCameraError(null);
+    setIsInitializing(true);
+    setShowCamera(true); // Show the camera UI immediately
+    
+    try {
+        // Stop any existing stream first
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+
+        const constraints = {
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user' // Prioritize front camera
+            },
+            audio: false
+        };
+
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        setStream(newStream);
+        
+        // Wait for the video element to be available in the DOM
+        await new Promise(resolve => {
+            const checkVideo = () => {
+                if (videoRef.current) {
+                    resolve();
+                } else {
+                    setTimeout(checkVideo, 50);
+                }
+            };
+            checkVideo();
+        });
+
+        const video = videoRef.current;
+        video.srcObject = newStream;
+        
+        // Use both events for better reliability
+        const onCanPlay = () => {
+            video.removeEventListener('canplay', onCanPlay);
+            setIsCameraReady(true);
+            setIsInitializing(false);
+        };
+        
+        const onError = () => {
+            video.removeEventListener('error', onError);
+            setCameraError("Video playback error");
+            setIsInitializing(false);
+        };
+        
+        video.addEventListener('canplay', onCanPlay);
+        video.addEventListener('error', onError);
+        
+        // Start playing the video
+        await video.play().catch(err => {
+            console.error("Play error:", err);
+            setCameraError("Couldn't start video playback");
+            setIsInitializing(false);
+        });
+        
+    } catch (err) {
+        console.error("Camera error:", err);
+        setCameraError(err.message || "Couldn't access camera");
+        setIsInitializing(false);
+    }
+};
+
+const captureScreenshot = () => {
+    if (!isCameraReady) {
+        alert("Camera is not ready yet. Please wait a moment.");
+        return;
+    }
+
+    try {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        
+        if (!video || !canvas) {
+            throw new Error("Video or canvas elements not found");
+        }
+
+        // Double-check video is actually playing
+        if (video.paused || video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+            throw new Error("Video stream not ready for capture");
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                throw new Error("Failed to create image blob");
+            }
+            
+            const file = new File([blob], `photo_${Date.now()}.png`, { 
+                type: "image/png",
+                lastModified: Date.now()
+            });
+            
+            setImg({
+                file: file,
+                url: URL.createObjectURL(file),
+            });
+            
+            closeCamera();
+        }, 'image/png', 0.95);
+    } catch (error) {
+        console.error("Capture error:", error);
+        alert("Failed to capture photo: " + error.message);
+    }
+};
+
+const closeCamera = () => {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+    }
+    setShowCamera(false);
+};
+
+// Clean up camera on unmount
+useEffect(() => {
+    return () => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+    };
+}, [stream]);
+
+
+
 
     return (
         <div className="chat">
@@ -381,9 +549,9 @@ export default function Chat({ toggleDetails }) {
                                     {message.img && (
                                         <div className="message-image-container">
                                             <img src={message.img} alt="Sent Image" className="sent-image" />
-                                            <a href={message.img} download={`image_${Date.now()}.jpg`} className="download-button">
-    📥
-</a>
+                                            <button onClick={() => handleDownload(message.img)} className="download-button">
+            📥
+        </button>
                                         </div>
                                     )}
                                     {message.audioUrl ? (
@@ -432,9 +600,42 @@ export default function Chat({ toggleDetails }) {
                         <img src="./img.png" alt="" />
                     </label>
                     <input type="file" id="file" style={{ display: "none" }} onChange={handleImg} />
-                    <img src="./camera.png" alt="" />
-                    <img src="./mic.png" alt="" onClick={audio.isRecording ? stopRecording : startRecording} />
+                    <img src="./camera.png" alt="camera" onClick={openCamera} />
+                    <img src= {audio.isRecording ? "./play.png" : "./mic.png"} alt="" onClick={audio.isRecording ? stopRecording : startRecording} className={audio.isRecording ? "recording-icon" : ""}/>
                 </div>
+
+                {showCamera && (
+    <div className="camera-popup">
+        {cameraError ? (
+            <div className="camera-error">
+                <p>⚠️ {cameraError}</p>
+                <button onClick={closeCamera}>Close</button>
+                <button onClick={openCamera}>Retry</button>
+            </div>
+        ) : (
+            <>
+                <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted
+                    className="camera-video"
+                />
+                <canvas ref={canvasRef} style={{ display: "none" }} />
+                
+                <div className="camera-buttons">
+                    <button 
+                        onClick={captureScreenshot}
+                        disabled={!isCameraReady || isInitializing}
+                    >
+                        {isInitializing ? "Initializing..." : "📸 Capture"}
+                    </button>
+                    <button onClick={closeCamera}>❌ Close</button>
+                </div>
+            </>
+        )}
+    </div>
+)}
                 <input
                     type="text"
                     placeholder={isCurrentUserBlocked || isReceiverBlocked ? "You cannot able to send" : "Type a message..."}

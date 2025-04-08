@@ -5,6 +5,7 @@ import { useUserStore } from "../../lib/userStore";
 import { useChatStore } from "../../lib/chatStore";
 import Addusers from "./addusers/Addusers";
 import "./chatlist.css";
+import StoryModal from "./StoryModal";
 
 export default function Chatlist() {
     const [Chats, SetChats] = useState([]);
@@ -12,6 +13,11 @@ export default function Chatlist() {
     const [input, SetInput] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(null); // Track which chat's dropdown is open
     const [activeArrow, setActiveArrow] = useState(null); // Track which chat's arrow is clicked
+
+
+    const [selectedStoryUser, setSelectedStoryUser] = useState(null);
+    const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+
 
     const { currentUser } = useUserStore();
     const { chatId, changeChat } = useChatStore();
@@ -119,6 +125,49 @@ export default function Chatlist() {
         c.user.username.toLowerCase().includes(input.toLowerCase())
     );
 
+
+    
+
+    // story code
+
+    const handleStoryClick = (user) => {
+        if (user.stories?.length > 0) {
+            setSelectedStoryUser(user);
+            setCurrentStoryIndex(0);
+        }
+    };
+
+    const closeStoryModal = () => {
+        setSelectedStoryUser(null);
+    };
+
+    const goToNextStory = () => {
+        if (selectedStoryUser && currentStoryIndex < selectedStoryUser.stories.length - 1) {
+            setCurrentStoryIndex(currentStoryIndex + 1);
+        } else {
+            closeStoryModal();
+        }
+    };
+    const goToPrevStory = () => {
+        if (currentStoryIndex > 0) {
+            setCurrentStoryIndex(currentStoryIndex - 1);
+        }
+    };
+
+    // Filter out expired stories
+    const filterActiveStories = (user) => {
+        if (!user.stories) return user;
+        const now = new Date();
+        return {
+            ...user,
+            stories: user.stories.filter(story => 
+                story.expiresAt?.toDate() > now
+            )
+        };
+    };
+
+
+
     return (
         <div className="Chatlist">
             <div className="search">
@@ -137,55 +186,82 @@ export default function Chatlist() {
                     onClick={() => SetAddMode((prev) => !prev)}
                 />
             </div>
-
-            {filteredChats.map((chat) => (
-                <div
-                    className="item"
-                    key={chat.chatId}
-                    onMouseEnter={() => setDropdownOpen(chat.chatId)}
-                    onMouseLeave={() => setDropdownOpen(null)}
-                    onClick={() => handleSelect(chat)}
-                    style={{
-                        backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
-                        borderLeft: chat.isSeen ? "none" : "5px solid red",
-                        position: "relative",
-                    }}
-                >
-                    <img
-                        src={chat.user.blocked.includes(currentUser.id) ? "./avatar.png" : chat.user.avatarUrl || "./avatar.png"}
-                        alt=""
-                    />
-                    <div className="texts" >
-                        <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
-                            {chat.user?.blocked?.includes(currentUser.id) ? "User" : chat.user?.username}
-                        </span>
-                        <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
-                            {chat.lastMessage}
-                        </p>
-                    </div>
-
-                    {/* Red dot for unread messages */}
-                    {!chat.isSeen && <div className="unread-dot"></div>}
-
-                    {/* Arrow Icon - Appears on Hover */}
+    
+            {filteredChats.map((chat) => {
+                const userWithStories = filterActiveStories(chat.user);
+                const hasStories = userWithStories.stories?.length > 0;
+    
+                return (
                     <div
-                        className="arrow-icon"
-                        onClick={() => setActiveArrow(activeArrow === chat.chatId ? null : chat.chatId)}
+                        className="item"
+                        key={chat.chatId}
+                        onMouseEnter={() => setDropdownOpen(chat.chatId)}
+                        onMouseLeave={() => setDropdownOpen(null)}
+                        onClick={() => handleSelect(chat)}
+                        style={{
+                            backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
+                            borderLeft: chat.isSeen ? "none" : "5px solid red",
+                            position: "relative",
+                        }}
                     >
-                        &#8595; {/* Downward arrow */}
-                    </div>
-
-                    {/* Delete Button - Appears After Clicking Arrow */}
-                    {activeArrow === chat.chatId && (
-                        <div className="dropdown">
-                            
-                            <button onClick={(e) => {e.stopPropagation(); handleDeleteChat(chat.chatId)}}>Delete</button>
+                        <div className="avatar-container" onClick={(e) => {
+                            e.stopPropagation();
+                            handleStoryClick(userWithStories);
+                        }}>
+                            <img
+                                src={userWithStories.blocked.includes(currentUser.id) ? "./avatar.png" : userWithStories.avatarUrl || "./avatar.png"}
+                                alt=""
+                                className={`user-avatar ${hasStories ? 'has-story' : ''}`}
+                            />
+                            {hasStories && <div className="story-indicator"></div>}
                         </div>
-                    )}
-                </div>
-            ))}
-
+                        <div className="texts">
+                            <span style={{ color: "white", fontWeight: chat.isSeen ? "normal" : "bold" }}>
+                                {userWithStories?.blocked?.includes(currentUser.id) ? "User" : userWithStories?.username}
+                            </span>
+                            <p style={{ fontWeight: chat.isSeen ? "normal" : "bold", color: chat.isSeen ? "#ccc" : "#fff" }}>
+                                {chat.lastMessage}
+                            </p>
+                        </div>
+    
+                        {!chat.isSeen && <div className="unread-dot"></div>}
+    
+                        <div
+                            className="arrow-icon"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveArrow(activeArrow === chat.chatId ? null : chat.chatId);
+                            }}
+                        >
+                            &#8595;
+                        </div>
+    
+                        {activeArrow === chat.chatId && (
+                            <div className="dropdown">
+                                <button onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteChat(chat.chatId);
+                                }}>
+                                    Delete
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+    
             {addMode && <Addusers />}
+    
+            {selectedStoryUser && (
+                <StoryModal
+                    user={selectedStoryUser}
+                    currentIndex={currentStoryIndex}
+                    onClose={closeStoryModal}
+                    onNext={goToNextStory}
+                    onPrev={goToPrevStory}
+                    currentUserId={currentUser.id}
+                />
+            )}
         </div>
     );
 }

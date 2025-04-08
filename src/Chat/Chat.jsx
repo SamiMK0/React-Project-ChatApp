@@ -508,25 +508,25 @@ export default function Chat({ toggleDetails }) {
         const extension = url.split('.').pop().toLowerCase().split('?')[0]; // Handle URLs with query params
         return imageExtensions.includes(extension);
     }
-    
+
     function extractFileName(url) {
-    try {
-        // Decode URI and get the last part after /
-        const decoded = decodeURIComponent(url);
-        let fileName = decoded.split('/').pop().split('?')[0];
-        
-        // Remove timestamp prefix if it exists (format: 123456789_filename.ext)
-        const timestampRegex = /^\d+_/;
-        if (timestampRegex.test(fileName)) {
-            fileName = fileName.replace(timestampRegex, '');
+        try {
+            // Decode URI and get the last part after /
+            const decoded = decodeURIComponent(url);
+            let fileName = decoded.split('/').pop().split('?')[0];
+
+            // Remove timestamp prefix if it exists (format: 123456789_filename.ext)
+            const timestampRegex = /^\d+_/;
+            if (timestampRegex.test(fileName)) {
+                fileName = fileName.replace(timestampRegex, '');
+            }
+
+            return fileName;
+        } catch (e) {
+            return url.split('/').pop().split('?')[0];
         }
-        
-        return fileName;
-    } catch (e) {
-        return url.split('/').pop().split('?')[0];
     }
-}
-    
+
     return (
         <div className="chat">
             <div className="top">
@@ -574,53 +574,53 @@ export default function Chat({ toggleDetails }) {
                         acc.push(
                             <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}>
                                 <div className="texts">
-                               
-{message.img && (
-    <div className="message-image-container">
-        {isValidImage(message.img) ? (
-            // Display image with error handling
-            <>
-                <img 
-                    src={message.img} 
-                    alt="" 
-                    className="sent-image"
-                    onError={(e) => {
-                        e.target.onerror = null; 
-                        e.target.src = './file-icon.png';
-                        e.target.classList.add('file-icon');
-                    }}
-                />
-                <button onClick={() => handleDownload(message.img)} className="download-button">
-                    📥
-                </button>
-            </>
-        ) : (
-            
-            <>
-            <div className="file-preview">
-                {/* Document icon with label */}
-                <div className="document-icon-container">
-                    <span className="document-icon">📄</span> 
-                </div>
-                
-                {/* File name */}
-                <p className="file-name" style={{ color: 'black', marginTop: '5px' }}>
-                    {extractFileName(message.img)}
-                </p>
-            </div>
-            
-            {/* Download button */}
-            <button 
-                onClick={() => handleDownload(message.img)} 
-                className="download-button"
-                title="Download document"
-            >
-                📥
-            </button>
-        </>
-        )}
-    </div>
-)}
+
+                                    {message.img && (
+                                        <div className="message-image-container">
+                                            {isValidImage(message.img) ? (
+                                                // Display image with error handling
+                                                <>
+                                                    <img
+                                                        src={message.img}
+                                                        alt=""
+                                                        className="sent-image"
+                                                        onError={(e) => {
+                                                            e.target.onerror = null;
+                                                            e.target.src = './file-icon.png';
+                                                            e.target.classList.add('file-icon');
+                                                        }}
+                                                    />
+                                                    <button onClick={() => handleDownload(message.img)} className="download-button">
+                                                        📥
+                                                    </button>
+                                                </>
+                                            ) : (
+
+                                                <>
+                                                    <div className="file-preview">
+                                                        {/* Document icon with label */}
+                                                        <div className="document-icon-container">
+                                                            <span className="document-icon">📄</span>
+                                                        </div>
+
+                                                        {/* File name */}
+                                                        <p className="file-name" style={{ color: 'black', marginTop: '5px' }}>
+                                                            {extractFileName(message.img)}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Download button */}
+                                                    <button
+                                                        onClick={() => handleDownload(message.img)}
+                                                        className="download-button"
+                                                        title="Download document"
+                                                    >
+                                                        📥
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
 
 
                                     {message.audioUrl ? (
@@ -724,38 +724,38 @@ export default function Chat({ toggleDetails }) {
                 </button>
             </div>
             {showPreview && img.file && (
-    <div className="preview-modal">
-        <div className="preview-content">
-            <span className="close-btn" onClick={() => {
-                setImg({ file: null, url: "" });
-                setShowPreview(false);
-            }}>×</span>
+                <div className="preview-modal">
+                    <div className="preview-content">
+                        <span className="close-btn" onClick={() => {
+                            setImg({ file: null, url: "" });
+                            setShowPreview(false);
+                        }}>×</span>
 
-            <h3>File Preview</h3>
+                        <h3>File Preview</h3>
 
-            {img.file.type.startsWith("image/") ? (
-                <img src={img.url} alt="preview" className="popup-image" />
-            ) : (
-                <div className="popup-file-info">
-                    <p>📄 {img.file.name}</p>
+                        {img.file.type.startsWith("image/") ? (
+                            <img src={img.url} alt="preview" className="popup-image" />
+                        ) : (
+                            <div className="popup-file-info">
+                                <p>📄 {img.file.name}</p>
+                            </div>
+                        )}
+
+                        <div className="popup-actions">
+                            <button className="cancel-btn" onClick={() => {
+                                setImg({ file: null, url: "" });
+                                setShowPreview(false);
+                            }}>Cancel</button>
+
+                            <button className="confirm-btn" onClick={() => {
+                                setShowPreview(false);
+                                handleSend(); // You already use this
+                            }}>Send</button>
+                        </div>
+                    </div>
                 </div>
             )}
-
-            <div className="popup-actions">
-                <button className="cancel-btn" onClick={() => {
-                    setImg({ file: null, url: "" });
-                    setShowPreview(false);
-                }}>Cancel</button>
-
-                <button className="confirm-btn" onClick={() => {
-                    setShowPreview(false);
-                    handleSend(); // You already use this
-                }}>Send</button>
-            </div>
         </div>
-    </div>
-)}
-        </div>
-        
+
     );
 }

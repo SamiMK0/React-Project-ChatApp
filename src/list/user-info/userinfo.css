@@ -63,3 +63,26 @@
 .popup button:hover {
     background: #f0f0f0;
 }
+
+
+
+.icons {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+/* Logout Icon Button Styling */
+.logout-icon-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.3rem;
+    padding: 5px;
+    transition: transform 0.2s;
+}
+
+.logout-icon-button:hover {
+    transform: scale(1.1);
+    opacity: 0.8;
+}

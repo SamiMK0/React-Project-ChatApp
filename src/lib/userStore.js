@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import { db } from "./firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 export const useUserStore = create((set) => ({
     currentUser: null,
     isLoading: true,
+    
     fetchUserInfo: async (uid) => {
         if (!uid) return set({ currentUser: null, isLoading: false });
 
@@ -22,5 +23,15 @@ export const useUserStore = create((set) => ({
             return set({ currentUser: null, isLoading: false });
         }
     },
-    resetUser: () => set({ currentUser: null, isLoading: true }), // Add this function
+    
+    updateUser: (updatedUserData) => {
+        set((state) => ({
+            currentUser: {
+                ...state.currentUser,
+                ...updatedUserData
+            }
+        }));
+    },
+    
+    resetUser: () => set({ currentUser: null, isLoading: true }),
 }));

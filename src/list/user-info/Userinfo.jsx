@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { uploadBytes, getDownloadURL, ref as storageRef } from "firebase/storage";
 import { db, storage } from "../../lib/firebase";
 import { doc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore";
+import StoryModal from "../Chatlist/StoryModal";
 
 export default function Userinfo() {
     const { currentUser, updateUser } = useUserStore();
@@ -18,6 +19,8 @@ export default function Userinfo() {
         bio: ""
     });
     const [avatarPreview, setAvatarPreview] = useState(null);
+    const [showStoryModal, setShowStoryModal] = useState(false);
+    const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
 
     useEffect(() => {
         if (currentUser) {
@@ -141,6 +144,42 @@ export default function Userinfo() {
         }
     };
 
+    const handleAvatarClick = () => {
+        if (currentUser.stories?.length > 0) {
+            setShowStoryModal(true);
+            setCurrentStoryIndex(0);
+        }
+    };
+
+    const closeStoryModal = () => {
+        setShowStoryModal(false);
+    };
+
+    const goToNextStory = () => {
+        if (currentStoryIndex < currentUser.stories.length - 1) {
+            setCurrentStoryIndex(currentStoryIndex + 1);
+        } else {
+            closeStoryModal();
+        }
+    };
+
+    const goToPrevStory = () => {
+        if (currentStoryIndex > 0) {
+            setCurrentStoryIndex(currentStoryIndex - 1);
+        }
+    };
+
+    const filterActiveStories = (user) => {
+        if (!user.stories) return user;
+        const now = new Date();
+        return {
+            ...user,
+            stories: user.stories.filter(story => 
+                story.expiresAt?.toDate() > now
+            )
+        };
+    };
+
     return (
         <div className="userinfo">
             <div className="user">
@@ -149,6 +188,8 @@ export default function Userinfo() {
                         src={avatarPreview || currentUser.avatarUrl || "./avatar.png"} 
                         alt="" 
                         className={`user-avatar ${currentUser.stories?.length > 0 ? 'has-story' : ''}`}
+                        onClick={handleAvatarClick}
+                        style={{ cursor: currentUser.stories?.length > 0 ? 'pointer' : 'default' }}
                     />
                     <button 
                         className="avatar-edit-button"
@@ -248,6 +289,18 @@ export default function Userinfo() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Story Modal */}
+            {showStoryModal && currentUser.stories?.length > 0 && (
+                <StoryModal
+                    user={currentUser}
+                    currentIndex={currentStoryIndex}
+                    onClose={closeStoryModal}
+                    onNext={goToNextStory}
+                    onPrev={goToPrevStory}
+                    currentUserId={currentUser.id}
+                />
             )}
         </div>
     );

@@ -1,8 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import "./StoryModal.css";
 
-export default function StoryModal({ user, currentIndex, onClose, onNext, onPrev, currentUserId }) {
+export default function StoryModal({
+    user, 
+    currentIndex, 
+    onClose, 
+    onNext, 
+    onPrev, 
+    currentUserId,
+    showDeleteOption,
+    onToggleDelete,
+    onDeleteStory,
+    isOwnStory = false
+}) {
+
     const [currentStory, setCurrentStory] = useState(null);
     const [progress, setProgress] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
@@ -22,9 +35,13 @@ export default function StoryModal({ user, currentIndex, onClose, onNext, onPrev
     useEffect(() => {
         if (user?.stories?.length > 0) {
             setCurrentStory(user.stories[currentIndex]);
-            markStoryAsViewed();
+            if (!isOwnStory) {
+                markStoryAsViewed();
+            }
         }
     }, [user, currentIndex]);
+
+
 
     useEffect(() => {
         if (!currentStory) return;
@@ -110,7 +127,28 @@ export default function StoryModal({ user, currentIndex, onClose, onNext, onPrev
                             {formatTimeSinceUpload(currentStory.createdAt.toDate())}
                         </div>
                     )}
+                    {isOwnStory && (
+                        <button 
+                            className="story-more-btn"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleDelete();
+                            }}
+                        >
+                            ⋮
+                        </button>
+                    )}
                 </div>
+                {showDeleteOption && (
+                    <div className="story-delete-option" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => {
+                            onDeleteStory();
+                            onToggleDelete();
+                        }}>
+                            Delete Story
+                        </button>
+                    </div>
+                )}
 
                 <div className="story-progress-container">
                     {user.stories.map((_, index) => (

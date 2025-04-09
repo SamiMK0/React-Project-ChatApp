@@ -5,9 +5,8 @@ import { auth } from "../../lib/firebase";
 import { useState, useRef, useEffect } from "react";
 import { uploadBytes, getDownloadURL, ref as storageRef } from "firebase/storage";
 import { db, storage } from "../../lib/firebase";
-import { doc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, Timestamp, arrayRemove } from "firebase/firestore";
 import StoryModal from "../Chatlist/StoryModal";
-
 export default function Userinfo() {
     const { currentUser, updateUser } = useUserStore();
     const fileInputRef = useRef(null);
@@ -21,6 +20,7 @@ export default function Userinfo() {
     const [avatarPreview, setAvatarPreview] = useState(null);
     const [showStoryModal, setShowStoryModal] = useState(false);
     const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+    const [showDeleteOption, setShowDeleteOption] = useState(false);
 
     useEffect(() => {
         if (currentUser) {
@@ -153,11 +153,13 @@ export default function Userinfo() {
 
     const closeStoryModal = () => {
         setShowStoryModal(false);
+        setShowDeleteOption(false);
     };
 
     const goToNextStory = () => {
         if (currentStoryIndex < currentUser.stories.length - 1) {
             setCurrentStoryIndex(currentStoryIndex + 1);
+            setShowDeleteOption(false);
         } else {
             closeStoryModal();
         }
@@ -166,6 +168,43 @@ export default function Userinfo() {
     const goToPrevStory = () => {
         if (currentStoryIndex > 0) {
             setCurrentStoryIndex(currentStoryIndex - 1);
+            setShowDeleteOption(false);
+        }
+    };
+
+    const toggleDeleteOption = () => {
+        setShowDeleteOption(!showDeleteOption);
+    };
+
+    const deleteCurrentStory = async () => {
+        if (!currentUser.stories || currentUser.stories.length === 0) return;
+        
+        try {
+            setIsUploading(true);
+            const userRef = doc(db, "users", currentUser.id);
+            const storyToDelete = currentUser.stories[currentStoryIndex];
+            
+            await updateDoc(userRef, {
+                stories: arrayRemove(storyToDelete)
+            });
+
+            // Update local state
+            const updatedStories = [...currentUser.stories];
+            updatedStories.splice(currentStoryIndex, 1);
+            updateUser({ ...currentUser, stories: updatedStories });
+
+            // Adjust story index if needed
+            if (currentStoryIndex >= updatedStories.length && updatedStories.length > 0) {
+                setCurrentStoryIndex(updatedStories.length - 1);
+            } else if (updatedStories.length === 0) {
+                closeStoryModal();
+            }
+
+            setShowDeleteOption(false);
+        } catch (error) {
+            console.error("Error deleting story:", error);
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -300,6 +339,10 @@ export default function Userinfo() {
                     onNext={goToNextStory}
                     onPrev={goToPrevStory}
                     currentUserId={currentUser.id}
+                    showDeleteOption={showDeleteOption}
+                    onToggleDelete={toggleDeleteOption}
+                    onDeleteStory={deleteCurrentStory}
+                    isOwnStory={true}
                 />
             )}
         </div>

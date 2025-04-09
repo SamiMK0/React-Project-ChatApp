@@ -1,0 +1,41 @@
+/* Story Modal Delete Options */
+.story-more-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    margin-left: 10px;
+}
+
+.story-delete-option {
+    position: absolute;
+    top: 50px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.story-delete-option button {
+    background: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    
+}
+
+.story-delete-option button:hover {
+    background: #ff3333;
+}
+
+/* Make sure the delete option appears above other elements */
+.story-modal-content {
+    position: relative;
+    z-index: 10;
+}

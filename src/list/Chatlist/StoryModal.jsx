@@ -9,8 +9,16 @@ export default function StoryModal({ user, currentIndex, onClose, onNext, onPrev
     const progressInterval = useRef(null);
     const videoRef = useRef(null);
 
+    const formatTimeSinceUpload = (uploadTime) => {
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - uploadTime) / 1000);
+        
+        if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    };
 
-    
     useEffect(() => {
         if (user?.stories?.length > 0) {
             setCurrentStory(user.stories[currentIndex]);
@@ -97,7 +105,11 @@ export default function StoryModal({ user, currentIndex, onClose, onNext, onPrev
                 <div className="story-header">
                     <img src={user.avatarUrl || "./avatar.png"} alt="" className="story-user-avatar" />
                     <span className="story-username">{user.username}</span>
-                    <div className="story-time-left">24h</div>
+                    {currentStory?.createdAt && (
+                        <div className="story-time">
+                            {formatTimeSinceUpload(currentStory.createdAt.toDate())}
+                        </div>
+                    )}
                 </div>
 
                 <div className="story-progress-container">

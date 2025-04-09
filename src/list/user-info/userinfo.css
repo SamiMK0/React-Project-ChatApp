@@ -105,9 +105,10 @@
     align-items: center;
     justify-content: space-between;
     padding: 15px;
-    background-color: #2f2d52;
+    background-color: rgba(17,25,40,0.75);
     color: #ddddf7;
-    height: 50px;
+    height: 80px;
+    border-radius: 20px;
 }
 
 .user {

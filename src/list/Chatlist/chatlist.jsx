@@ -188,22 +188,23 @@ export default function Chatlist() {
             </div>
     
             {filteredChats.map((chat) => {
-                const userWithStories = filterActiveStories(chat.user);
-                const hasStories = userWithStories.stories?.length > 0;
-    
+            const userWithStories = filterActiveStories(chat.user);
+            const hasStories = userWithStories.stories?.length > 0;
+            const showUnreadIndicator = !chat.isSeen && chat.chatId !== chatId;
+
                 return (
                     <div
-                        className="item"
-                        key={chat.chatId}
-                        onMouseEnter={() => setDropdownOpen(chat.chatId)}
-                        onMouseLeave={() => setDropdownOpen(null)}
-                        onClick={() => handleSelect(chat)}
-                        style={{
-                            backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
-                            borderLeft: chat.isSeen ? "none" : "5px solid red",
-                            position: "relative",
-                        }}
-                    >
+                    className="item"
+                    key={chat.chatId}
+                    onMouseEnter={() => setDropdownOpen(chat.chatId)}
+                    onMouseLeave={() => setDropdownOpen(null)}
+                    onClick={() => handleSelect(chat)}
+                    style={{
+                        backgroundColor: chat.chatId === chatId ? "#a39998" : chat.isSeen ? "transparent" : "#2a2a2a",
+                        borderLeft: showUnreadIndicator ? "5px solid red" : "none",
+                        position: "relative",
+                    }}
+                >
                         <div className="avatar-container" onClick={(e) => {
                             e.stopPropagation();
                             handleStoryClick(userWithStories);
@@ -223,29 +224,22 @@ export default function Chatlist() {
                                 {chat.lastMessage}
                             </p>
                         </div>
-    
-                        {!chat.isSeen && <div className="unread-dot"></div>}
-    
-                        <div
-                            className="arrow-icon"
+
+                        {/* Unread indicator with proper spacing */}
+                        {showUnreadIndicator && <div className="unread-dot"></div>}
+
+                        {/* Delete button that appears on hover */}
+                        <div className={`delete-button-container ${dropdownOpen === chat.chatId ? 'visible' : ''}`}>
+                        <button 
+                            className="delete-button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveArrow(activeArrow === chat.chatId ? null : chat.chatId);
+                                handleDeleteChat(chat.chatId);
                             }}
                         >
-                            &#8595;
-                        </div>
-    
-                        {activeArrow === chat.chatId && (
-                            <div className="dropdown">
-                                <button onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteChat(chat.chatId);
-                                }}>
-                                    Delete
-                                </button>
-                            </div>
-                        )}
+                            Delete
+                        </button>
+                    </div>
                     </div>
                 );
             })}
@@ -265,3 +259,4 @@ export default function Chatlist() {
         </div>
     );
 }
+

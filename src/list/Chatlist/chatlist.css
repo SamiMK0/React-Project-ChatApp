@@ -70,30 +70,72 @@
             }
         }
     }
-    .unread-dot {
-        width: 12px;
-        height: 12px;
-        background-color: red;
-        border-radius: 50%;
-        position: absolute;
-        right: 15px;
-        top: 50%;
-        transform: translateY(-50%);
-    }
+  /* Unread dot styling */
+  .unread-dot {
+    width: 12px;
+    height: 12px;
+    background-color: red;
+    border-radius: 50%;
+    position: absolute;
+    right: 80px; /* Adjusted to make space for delete button */
+    top: 50%;
+    transform: translateY(-50%);
+    transition: right 0.3s ease; /* Smooth movement when delete button appears */
+}
+
+.delete-button-container.visible ~ .unread-dot {
+    right: 100px;
+}
+
+
+.item {
+    position: relative;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+    gap: 10px;
+}
+
+.item:hover {
+    background-color: #3a3a3a;
     
-    .item {
-        position: relative;
-        padding: 10px;
-        display: flex;
-        align-items: center;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: 0.3s;
-    }
-    
-    .item:hover {
-        background-color: #3a3a3a; /* Slight hover effect */
-    }
+}
+
+/* Delete button container */
+.delete-button-container {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.delete-button-container.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Delete button styling */
+.delete-button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.delete-button:hover {
+    background-color: #d32f2f;
+    transform: scale(1.05);
+}
     /* Arrow Icon */
 .arrow-icon {
     position: absolute;
@@ -168,7 +210,7 @@
     right: -3px;
     width: 12px;
     height: 12px;
-    background-color: #7d7df7;
+    background-color: #4CAF50;
     border-radius: 50%;
     border: 2px solid #2a2a2a;
 }

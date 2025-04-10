@@ -7,6 +7,9 @@ import { useChatStore } from "../lib/chatStore";
 import { useUserStore } from "../lib/userStore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+
+import useVoiceCall from "./useVoiceCall";
+
 export default function Chat({ toggleDetails }) {
     const [chat, setChat] = useState();
     const [open, setOpen] = useState(false);
@@ -28,6 +31,36 @@ export default function Chat({ toggleDetails }) {
 
     const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
     const { currentUser } = useUserStore();
+    const otherUserId = user?.id;
+    const {
+        callStatus,
+        startCall,
+        answerCall,
+        endCall,
+        localStream,
+        remoteStream
+    } = useVoiceCall(currentUser?.id, otherUserId);
+
+    // Audio refs
+    const localAudioRef = useRef(null);
+    const remoteAudioRef = useRef(null);
+
+    // Update audio streams when they change
+    useEffect(() => {
+        if (localStream && localAudioRef.current) {
+            localAudioRef.current.srcObject = localStream;
+        }
+    }, [localStream]);
+
+    useEffect(() => {
+        if (remoteStream && remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+        }
+    }, [remoteStream]);
+
+
+
+
     const endRef = useRef(null);
     const [menuOpen, setMenuOpen] = useState(null);
 
@@ -258,53 +291,53 @@ export default function Chat({ toggleDetails }) {
 
     const handleSend = async () => {
         if (text === "" && !img.file) return;
-      
+
         let imgUrl = null;
-      
+
         try {
-          if (img.file) {
-            const storage = getStorage();
-            const imgRef = ref(storage, `images/${Date.now()}_${img.file.name}`);
-            await uploadBytes(imgRef, img.file);
-            imgUrl = await getDownloadURL(imgRef);
-          }
-      
-          // Send message with isSeen: false initially
-          await updateDoc(doc(db, "chats", chatId), {
-            messages: arrayUnion({
-              senderId: currentUser.id,
-              text,
-              createdAt: new Date(),
-              isSeen: false, // Add this line
-              ...(imgUrl && { img: imgUrl }),
-            }),
-          });
-      
-          // Update last message in user chats
-          const userIDs = [currentUser.id, user.id];
-          userIDs.forEach(async (id) => {
-            const userChatsRef = doc(db, "userchats", id);
-            const userChatsSnapshot = await getDoc(userChatsRef);
-      
-            if (userChatsSnapshot.exists()) {
-              const userChatsData = userChatsSnapshot.data();
-              const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
-      
-              if (chatIndex !== -1) {
-                userChatsData.chats[chatIndex].lastMessage = text || "📷 Image";
-                userChatsData.chats[chatIndex].isSeen = id === currentUser.id;
-                userChatsData.chats[chatIndex].updatedAt = Date.now();
-                await updateDoc(userChatsRef, { chats: userChatsData.chats });
-              }
+            if (img.file) {
+                const storage = getStorage();
+                const imgRef = ref(storage, `images/${Date.now()}_${img.file.name}`);
+                await uploadBytes(imgRef, img.file);
+                imgUrl = await getDownloadURL(imgRef);
             }
-          });
+
+            // Send message with isSeen: false initially
+            await updateDoc(doc(db, "chats", chatId), {
+                messages: arrayUnion({
+                    senderId: currentUser.id,
+                    text,
+                    createdAt: new Date(),
+                    isSeen: false, // Add this line
+                    ...(imgUrl && { img: imgUrl }),
+                }),
+            });
+
+            // Update last message in user chats
+            const userIDs = [currentUser.id, user.id];
+            userIDs.forEach(async (id) => {
+                const userChatsRef = doc(db, "userchats", id);
+                const userChatsSnapshot = await getDoc(userChatsRef);
+
+                if (userChatsSnapshot.exists()) {
+                    const userChatsData = userChatsSnapshot.data();
+                    const chatIndex = userChatsData.chats.findIndex((c) => c.chatId === chatId);
+
+                    if (chatIndex !== -1) {
+                        userChatsData.chats[chatIndex].lastMessage = text || "📷 Image";
+                        userChatsData.chats[chatIndex].isSeen = id === currentUser.id;
+                        userChatsData.chats[chatIndex].updatedAt = Date.now();
+                        await updateDoc(userChatsRef, { chats: userChatsData.chats });
+                    }
+                }
+            });
         } catch (err) {
-          console.error("Error sending message:", err);
+            console.error("Error sending message:", err);
         }
-      
+
         setImg({ file: null, url: "" });
         setText("");
-      };
+    };
 
     const handleKeyPress = (e) => {
         if (e.key === "Enter") {
@@ -523,181 +556,181 @@ export default function Chat({ toggleDetails }) {
 
     useEffect(() => {
         if (!chatId || !currentUser?.id) return;
-      
+
         const markMessagesAsSeen = async () => {
-          try {
-            const chatRef = doc(db, "chats", chatId);
-            const chatSnap = await getDoc(chatRef);
-      
-            if (chatSnap.exists()) {
-              const messages = chatSnap.data().messages || [];
-              const unseenMessages = messages.filter(
-                msg => msg.senderId !== currentUser.id && !msg.isSeen
-              );
-      
-              if (unseenMessages.length > 0) {
-                // Update all unseen messages
-                const updatedMessages = messages.map(msg => {
-                  if (msg.senderId !== currentUser.id && !msg.isSeen) {
-                    return { ...msg, isSeen: true };
-                  }
-                  return msg;
-                });
-      
-                await updateDoc(chatRef, { messages: updatedMessages });
-      
-                // Update userchats to reflect seen status
-                const userChatsRef = doc(db, "userchats", currentUser.id);
-                const userChatsSnap = await getDoc(userChatsRef);
-      
-                if (userChatsSnap.exists()) {
-                  const userChatsData = userChatsSnap.data();
-                  const chatIndex = userChatsData.chats.findIndex(c => c.chatId === chatId);
-      
-                  if (chatIndex !== -1) {
-                    userChatsData.chats[chatIndex].isSeen = true;
-                    await updateDoc(userChatsRef, { chats: userChatsData.chats });
-                  }
+            try {
+                const chatRef = doc(db, "chats", chatId);
+                const chatSnap = await getDoc(chatRef);
+
+                if (chatSnap.exists()) {
+                    const messages = chatSnap.data().messages || [];
+                    const unseenMessages = messages.filter(
+                        msg => msg.senderId !== currentUser.id && !msg.isSeen
+                    );
+
+                    if (unseenMessages.length > 0) {
+                        // Update all unseen messages
+                        const updatedMessages = messages.map(msg => {
+                            if (msg.senderId !== currentUser.id && !msg.isSeen) {
+                                return { ...msg, isSeen: true };
+                            }
+                            return msg;
+                        });
+
+                        await updateDoc(chatRef, { messages: updatedMessages });
+
+                        // Update userchats to reflect seen status
+                        const userChatsRef = doc(db, "userchats", currentUser.id);
+                        const userChatsSnap = await getDoc(userChatsRef);
+
+                        if (userChatsSnap.exists()) {
+                            const userChatsData = userChatsSnap.data();
+                            const chatIndex = userChatsData.chats.findIndex(c => c.chatId === chatId);
+
+                            if (chatIndex !== -1) {
+                                userChatsData.chats[chatIndex].isSeen = true;
+                                await updateDoc(userChatsRef, { chats: userChatsData.chats });
+                            }
+                        }
+                    }
                 }
-              }
+            } catch (error) {
+                console.error("Error marking messages as seen:", error);
             }
-          } catch (error) {
-            console.error("Error marking messages as seen:", error);
-          }
         };
-      
+
         // Run when chat changes or component mounts
         markMessagesAsSeen();
-      }, [chat?.messages, chatId, currentUser?.id]);
+    }, [chat?.messages, chatId, currentUser?.id]);
 
 
 
-      const [searchQuery, setSearchQuery] = useState("");
-      const [searchResults, setSearchResults] = useState([]);
-      const [highlightedMessageId, setHighlightedMessageId] = useState(null);
-      const [currentHighlightIndex, setCurrentHighlightIndex] = useState(0);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState([]);
+    const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+    const [currentHighlightIndex, setCurrentHighlightIndex] = useState(0);
 
-      const handleSearch = () => {
+    const handleSearch = () => {
         if (!chat?.messages || !searchQuery.trim()) {
-          setSearchResults([]);
-          setHighlightedMessageId(null);
-          setCurrentHighlightIndex(0);
-          return;
+            setSearchResults([]);
+            setHighlightedMessageId(null);
+            setCurrentHighlightIndex(0);
+            return;
         }
-      
+
         const results = chat.messages
-          .filter(message => 
-            message.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (message.img && "image".includes(searchQuery.toLowerCase())) ||
-            (message.audioUrl && "voice message".includes(searchQuery.toLowerCase()))
-          )
-          .map(message => ({
-            ...message,
-            searchMatch: message.text?.toLowerCase().includes(searchQuery.toLowerCase()) 
-              ? message.text 
-              : message.img ? "Image" : "Voice message"
-          }));
-      
+            .filter(message =>
+                message.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (message.img && "image".includes(searchQuery.toLowerCase())) ||
+                (message.audioUrl && "voice message".includes(searchQuery.toLowerCase()))
+            )
+            .map(message => ({
+                ...message,
+                searchMatch: message.text?.toLowerCase().includes(searchQuery.toLowerCase())
+                    ? message.text
+                    : message.img ? "Image" : "Voice message"
+            }));
+
         setSearchResults(results);
         setCurrentHighlightIndex(0);
-        
-        if (results.length > 0) {
-          highlightMessage(results[0].createdAt.seconds);
-        }
-      };
 
-      const highlightMessage = (messageId) => {
+        if (results.length > 0) {
+            highlightMessage(results[0].createdAt.seconds);
+        }
+    };
+
+    const highlightMessage = (messageId) => {
         setHighlightedMessageId(messageId);
-        
+
         // Remove previous highlights
         document.querySelectorAll('.message.highlighted').forEach(el => {
-          el.classList.remove('highlighted');
+            el.classList.remove('highlighted');
         });
-        
+
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
         if (messageElement) {
-          messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
-          messageElement.classList.add("highlighted");
-          
-          // Remove highlight after 3 seconds
-          setTimeout(() => {
-            messageElement.classList.remove("highlighted");
-          }, 3000);
+            messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+            messageElement.classList.add("highlighted");
+
+            // Remove highlight after 3 seconds
+            setTimeout(() => {
+                messageElement.classList.remove("highlighted");
+            }, 3000);
         }
-      };
-      
-      const navigateResults = (direction) => {
+    };
+
+    const navigateResults = (direction) => {
         if (searchResults.length === 0) return;
-        
+
         let newIndex = currentHighlightIndex + direction;
         if (newIndex < 0) newIndex = searchResults.length - 1;
         if (newIndex >= searchResults.length) newIndex = 0;
-        
+
         setCurrentHighlightIndex(newIndex);
         highlightMessage(searchResults[newIndex].createdAt.seconds);
-      };
+    };
 
-  // Add a debounced search function for dynamic searching
-useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        handleSearch();
-      } else {
-        setSearchResults([]);
-      }
-    }, 300); // 300ms debounce delay
-  
-    return () => clearTimeout(timer);
-  }, [searchQuery, chat?.messages]);
-
-
-  // Add this state near your other state declarations
-  const [emojiPickerForMessage, setEmojiPickerForMessage] = useState(null);
-
-
-// Add this function to handle adding reactions
-const addReaction = async (messageId, emoji) => {
-    try {
-      if (!chatId || !messageId) return;
-  
-      const chatRef = doc(db, "chats", chatId);
-      const chatSnap = await getDoc(chatRef);
-  
-      if (chatSnap.exists()) {
-        const messages = chatSnap.data().messages || [];
-        const updatedMessages = messages.map(msg => {
-          if (msg.createdAt.seconds === messageId.seconds) {
-            // Initialize reactions if not exists
-            const reactions = msg.reactions || {};
-            
-            // Toggle reaction - if user already reacted with this emoji, remove it
-            if (reactions[currentUser.id] === emoji) {
-              delete reactions[currentUser.id];
+    // Add a debounced search function for dynamic searching
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchQuery.trim()) {
+                handleSearch();
             } else {
-              reactions[currentUser.id] = emoji;
+                setSearchResults([]);
             }
-            
-            return {
-              ...msg,
-              reactions: reactions
-            };
-          }
-          return msg;
-        });
-  
-        await updateDoc(chatRef, {
-          messages: updatedMessages
-        });
-  
-        setChat(prev => ({
-          ...prev,
-          messages: updatedMessages
-        }));
-      }
-    } catch (error) {
-      console.error("Error adding reaction:", error);
-    }
-  };
+        }, 300); // 300ms debounce delay
+
+        return () => clearTimeout(timer);
+    }, [searchQuery, chat?.messages]);
+
+
+    // Add this state near your other state declarations
+    const [emojiPickerForMessage, setEmojiPickerForMessage] = useState(null);
+
+
+    // Add this function to handle adding reactions
+    const addReaction = async (messageId, emoji) => {
+        try {
+            if (!chatId || !messageId) return;
+
+            const chatRef = doc(db, "chats", chatId);
+            const chatSnap = await getDoc(chatRef);
+
+            if (chatSnap.exists()) {
+                const messages = chatSnap.data().messages || [];
+                const updatedMessages = messages.map(msg => {
+                    if (msg.createdAt.seconds === messageId.seconds) {
+                        // Initialize reactions if not exists
+                        const reactions = msg.reactions || {};
+
+                        // Toggle reaction - if user already reacted with this emoji, remove it
+                        if (reactions[currentUser.id] === emoji) {
+                            delete reactions[currentUser.id];
+                        } else {
+                            reactions[currentUser.id] = emoji;
+                        }
+
+                        return {
+                            ...msg,
+                            reactions: reactions
+                        };
+                    }
+                    return msg;
+                });
+
+                await updateDoc(chatRef, {
+                    messages: updatedMessages
+                });
+
+                setChat(prev => ({
+                    ...prev,
+                    messages: updatedMessages
+                }));
+            }
+        } catch (error) {
+            console.error("Error adding reaction:", error);
+        }
+    };
 
     return (
         <div className="chat">
@@ -712,73 +745,112 @@ const addReaction = async (messageId, emoji) => {
                 <div className="icons">
 
                     <div className="search-container">
-                            <input
-                                type="text"
-                                placeholder="Search messages..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                            />
-                            <button onClick={handleSearch}>🔍</button>
+                        <input
+                            type="text"
+                            placeholder="Search messages..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                        />
+                        <button onClick={handleSearch}>🔍</button>
 
-                                    {searchResults.length > 0 && (
-                                        <div className="search-navigation">
-                                        <span>
-                                            {currentHighlightIndex + 1}/{searchResults.length}
-                                        </span>
-                                        <button onClick={() => navigateResults(-1)}>⬆</button>
-                                        <button onClick={() => navigateResults(1)}>⬇</button>
-                                        </div>
-                                    )}
+                        {searchResults.length > 0 && (
+                            <div className="search-navigation">
+                                <span>
+                                    {currentHighlightIndex + 1}/{searchResults.length}
+                                </span>
+                                <button onClick={() => navigateResults(-1)}>⬆</button>
+                                <button onClick={() => navigateResults(1)}>⬇</button>
+                            </div>
+                        )}
                     </div>
 
-                    <img src="./phone.png" alt="" />
+                    <div className="call-controls">
+                        <button
+                            onClick={startCall}
+                            disabled={callStatus !== 'idle' || !otherUserId}
+                            title="Start voice call"
+                        >
+                            <img src="./phone.png" alt="Call" />
+                        </button>
+
+                        {callStatus === 'ringing' && (
+                            <div className="incoming-call">
+                                <p>Incoming call from {user?.username}</p>
+                                <button onClick={answerCall} className="accept-call">
+                                    Answer
+                                </button>
+                                <button onClick={endCall} className="decline-call">
+                                    Decline
+                                </button>
+                            </div>
+                        )}
+
+                        {['calling', 'ongoing'].includes(callStatus) && (
+                            <div className="active-call">
+                                <p>
+                                    {callStatus === 'calling' ? 'Calling...' : 'Call in progress'}
+                                </p>
+                                <button onClick={endCall} className="end-call">
+                                    End Call
+                                </button>
+                            </div>
+                        )}
+
+                        <audio ref={localAudioRef} muted autoPlay playsInline />
+                        <audio ref={remoteAudioRef} autoPlay playsInline />
+                    </div>
+
+
+
+
                     <img src="./video.png" alt="" />
                     <img src="./info.png" alt="" onClick={toggleDetails} id="info" />
                 </div>
+
             </div>
 
             {searchQuery && (
-  <div className="search-results">
-    {searchResults.length > 0 ? (
-      searchResults.map((message, index) => (
-        <div 
-          key={message.createdAt.seconds} 
-          className={`search-result-item ${index === currentHighlightIndex ? 'active' : ''}`}
-          onClick={() => {
-            setCurrentHighlightIndex(index);
-            highlightMessage(message.createdAt.seconds);
-          }}
-        >
-          <p>
-            {message.searchMatch === "Image" ? (
-              <span>📷 Image</span>
-            ) : message.searchMatch === "Voice message" ? (
-              <span>🎤 Voice message</span>
-            ) : (
-              <>
-                {message.searchMatch.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) => (
-                  part.toLowerCase() === searchQuery.toLowerCase() ? (
-                    <span key={i} className="highlight-text">{part}</span>
-                  ) : (
-                    <span key={i}>{part}</span>
-                  )
-                ))}
-              </>
+                <div className="search-results">
+                    {searchResults.length > 0 ? (
+                        searchResults.map((message, index) => (
+                            <div
+                                key={message.createdAt.seconds}
+                                className={`search-result-item ${index === currentHighlightIndex ? 'active' : ''}`}
+                                onClick={() => {
+                                    setCurrentHighlightIndex(index);
+                                    highlightMessage(message.createdAt.seconds);
+                                }}
+                            >
+                                <p>
+                                    {message.searchMatch === "Image" ? (
+                                        <span>📷 Image</span>
+                                    ) : message.searchMatch === "Voice message" ? (
+                                        <span>🎤 Voice message</span>
+                                    ) : (
+                                        <>
+                                            {message.searchMatch.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) => (
+                                                part.toLowerCase() === searchQuery.toLowerCase() ? (
+                                                    <span key={i} className="highlight-text">{part}</span>
+                                                ) : (
+                                                    <span key={i}>{part}</span>
+                                                )
+                                            ))}
+                                        </>
+                                    )}
+                                </p>
+                                <span className="search-result-time">
+                                    {formatTime(message.createdAt)}
+                                </span>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="search-no-results">
+                            No messages found for "{searchQuery}"
+                        </div>
+                    )}
+                </div>
             )}
-          </p>
-          <span className="search-result-time">
-            {formatTime(message.createdAt)}
-          </span>
-        </div>
-      ))
-    ) : (
-      <div className="search-no-results">
-        No messages found for "{searchQuery}"
-      </div>
-    )}
-  </div>
-)}
 
 
             {/* Chat Details Section */}
@@ -810,7 +882,7 @@ const addReaction = async (messageId, emoji) => {
 
                         acc.push(
                             <div className={`message ${message.senderId === currentUser?.id ? "own" : ""}`} key={message.createdAt}
-                            data-message-id={message.createdAt.seconds}
+                                data-message-id={message.createdAt.seconds}
                             >
                                 <div className="texts">
 
@@ -872,25 +944,25 @@ const addReaction = async (messageId, emoji) => {
                                     )}
 
 
-                                {message.reactions && Object.keys(message.reactions).length > 0 && (
-                                    <div className="message-reactions">
-                                        {Object.entries(message.reactions).map(([userId, emoji]) => (
-                                        <span 
-                                            key={userId} 
-                                            className="reaction"
-                                            onClick={() => addReaction(message.createdAt, emoji)}
-                                            title={`Reacted with ${emoji}`}
-                                        >
-                                            {emoji}
-                                            {/* Show count if more than 1 user reacted with same emoji */}
-                                            {Object.values(message.reactions).filter(e => e === emoji).length > 1 && (
-                                            <span className="reaction-count">
-                                                {Object.values(message.reactions).filter(e => e === emoji).length}
-                                            </span>
-                                            )}
-                                        </span>
-                                        ))}
-                                    </div>
+                                    {message.reactions && Object.keys(message.reactions).length > 0 && (
+                                        <div className="message-reactions">
+                                            {Object.entries(message.reactions).map(([userId, emoji]) => (
+                                                <span
+                                                    key={userId}
+                                                    className="reaction"
+                                                    onClick={() => addReaction(message.createdAt, emoji)}
+                                                    title={`Reacted with ${emoji}`}
+                                                >
+                                                    {emoji}
+                                                    {/* Show count if more than 1 user reacted with same emoji */}
+                                                    {Object.values(message.reactions).filter(e => e === emoji).length > 1 && (
+                                                        <span className="reaction-count">
+                                                            {Object.values(message.reactions).filter(e => e === emoji).length}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            ))}
+                                        </div>
                                     )}
 
 
@@ -900,12 +972,12 @@ const addReaction = async (messageId, emoji) => {
                                         {message.senderId === currentUser?.id && (
                                             <div className="seen-indicators">
                                                 {message.isSeen ? (
-                                                <span className="seen">✓✓</span> // Blue checkmarks for seen
+                                                    <span className="seen">✓✓</span> // Blue checkmarks for seen
                                                 ) : (
-                                                <span className="not-seen">✓✓</span> // Gray checkmarks for not seen
+                                                    <span className="not-seen">✓✓</span> // Gray checkmarks for not seen
                                                 )}
                                             </div>
-                                            )}
+                                        )}
 
 
                                         <div className="relative inline-block text-left">
@@ -918,24 +990,24 @@ const addReaction = async (messageId, emoji) => {
 
                                             {menuOpen === message.createdAt && (
                                                 <div className="dropdown-menu animate-fade-in">
-                                                <button
-                                                onClick={() => {
-                                                    setEmojiPickerForMessage(message.createdAt);
-                                                    setMenuOpen(null);
-                                                }}
-                                                className="react-button"
-                                                >
-                                                <span>😀</span>
-                                                Add Reaction
-                                                </button>
-                                                <button
-                                                onClick={() => deleteMessage(message.createdAt)}
-                                                className="delete-button"
-                                                >
-                                                <span>🗑️</span>
-                                                Delete
-                                                </button>
-                                            </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEmojiPickerForMessage(message.createdAt);
+                                                            setMenuOpen(null);
+                                                        }}
+                                                        className="react-button"
+                                                    >
+                                                        <span>😀</span>
+                                                        Add Reaction
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteMessage(message.createdAt)}
+                                                        className="delete-button"
+                                                    >
+                                                        <span>🗑️</span>
+                                                        Delete
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -943,23 +1015,23 @@ const addReaction = async (messageId, emoji) => {
 
                                 {emojiPickerForMessage === message.createdAt && (
                                     <div className="message-emoji-picker">
-                                    <button 
-                                        onClick={() => setEmojiPickerForMessage(null)}
-                                        className="close-emoji-picker"
-                                    >
-                                        ×
-                                    </button>
-                                    <EmojiPicker 
-                                        onEmojiClick={(e) => {
-                                        addReaction(message.createdAt, e.emoji);
-                                        setEmojiPickerForMessage(null);
-                                        }} 
-                                        width={300}
-                                        height={350}
-                                        searchDisabled
-                                        skinTonesDisabled
-                                        previewConfig={{ showPreview: false }}
-                                    />
+                                        <button
+                                            onClick={() => setEmojiPickerForMessage(null)}
+                                            className="close-emoji-picker"
+                                        >
+                                            ×
+                                        </button>
+                                        <EmojiPicker
+                                            onEmojiClick={(e) => {
+                                                addReaction(message.createdAt, e.emoji);
+                                                setEmojiPickerForMessage(null);
+                                            }}
+                                            width={300}
+                                            height={350}
+                                            searchDisabled
+                                            skinTonesDisabled
+                                            previewConfig={{ showPreview: false }}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -974,25 +1046,26 @@ const addReaction = async (messageId, emoji) => {
             <div className="bottom">
                 <div className="icons">
                     <label htmlFor="file" id="label">
-                        <img src="./img.png" alt=""  title={isCurrentUserBlocked || isReceiverBlocked ? "Blocked - cannot send files" : "Attach file"} id="file-doc" style={{ cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
-                            opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
-                        }}/>
-                    </label>
-                    <input type="file" id="file" style={{ display: "none" }} onChange={handleImg} disabled={isCurrentUserBlocked || isReceiverBlocked}/>
-                    <img src="./camera.png" alt="camera" onClick={() => !(isCurrentUserBlocked || isReceiverBlocked) && openCamera()} style={{ 
+                        <img src="./img.png" alt="" title={isCurrentUserBlocked || isReceiverBlocked ? "Blocked - cannot send files" : "Attach file"} id="file-doc" style={{
                             cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
                             opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
-                            }}/>
+                        }} />
+                    </label>
+                    <input type="file" id="file" style={{ display: "none" }} onChange={handleImg} disabled={isCurrentUserBlocked || isReceiverBlocked} />
+                    <img src="./camera.png" alt="camera" onClick={() => !(isCurrentUserBlocked || isReceiverBlocked) && openCamera()} style={{
+                        cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
+                        opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
+                    }} />
                     <img src={audio.isRecording ? "./play.png" : "./mic.png"} alt="" className={audio.isRecording ? "recording-icon" : ""} disabled={isCurrentUserBlocked || isReceiverBlocked}
                         onClick={() => {
                             if (isCurrentUserBlocked || isReceiverBlocked) return;
                             audio.isRecording ? stopRecording() : startRecording();
                         }}
-                        style={{ 
+                        style={{
                             cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
                             opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
                         }}
-                    
+
                     />
                 </div>
 
@@ -1037,16 +1110,16 @@ const addReaction = async (messageId, emoji) => {
                     onKeyPress={handleKeyPress}
                 />
                 <div className="emoji">
-                    <img src="./emoji.png" alt=""  
-                            onClick={() => {
-                                if (!(isCurrentUserBlocked || isReceiverBlocked)) {
-                                    setOpen((prev) => !prev);
-                                }
-                            }}
-                            style={{
-                                cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
-                                opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
-                            }}
+                    <img src="./emoji.png" alt=""
+                        onClick={() => {
+                            if (!(isCurrentUserBlocked || isReceiverBlocked)) {
+                                setOpen((prev) => !prev);
+                            }
+                        }}
+                        style={{
+                            cursor: isCurrentUserBlocked || isReceiverBlocked ? 'not-allowed' : 'pointer',
+                            opacity: isCurrentUserBlocked || isReceiverBlocked ? 0.6 : 1
+                        }}
                     />
                     <div className="picker">
                         <EmojiPicker open={open} onEmojiClick={handleEmoji} />

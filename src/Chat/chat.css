@@ -793,3 +793,76 @@
     display: inline-block;
   }
 
+
+
+  .call-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.call-preview {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    width: 300px;
+    text-align: center;
+    z-index: 1000;
+}
+
+.call-preview .avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 10px;
+}
+
+.call-preview p {
+    font-size: 16px;
+    margin: 10px 0;
+    color: #333;
+}
+
+.call-actions {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+}
+
+.accept-call {
+    background: #4caf50 !important;
+    color: white !important;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.decline-call,
+.end-call {
+    background: #f44336 !important;
+    color: white !important;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.call-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.call-controls button img {
+    width: 30px;
+    height: 30px;
+}

@@ -38,8 +38,11 @@ export default function Chat({ toggleDetails }) {
         answerCall,
         endCall,
         localStream,
-        remoteStream
+        remoteStream,
+        currentCallId
     } = useVoiceCall(currentUser?.id, otherUserId);
+    // State for call duration
+    const [callDuration, setCallDuration] = useState(0);
 
     // Audio refs
     const localAudioRef = useRef(null);
@@ -51,12 +54,32 @@ export default function Chat({ toggleDetails }) {
             localAudioRef.current.srcObject = localStream;
         }
     }, [localStream]);
-
     useEffect(() => {
         if (remoteStream && remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
         }
     }, [remoteStream]);
+
+    // Timer for call duration
+    useEffect(() => {
+        let interval;
+        if (callStatus === 'ongoing') {
+            interval = setInterval(() => {
+                setCallDuration((prev) => prev + 1);
+            }, 1000);
+        } else {
+            clearInterval(interval);
+            setCallDuration(0);
+        }
+        return () => clearInterval(interval);
+    }, [callStatus]);
+
+    // Format call duration
+    const formatDuration = (seconds) => {
+        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const secs = (seconds % 60).toString().padStart(2, '0');
+        return `${mins}:${secs}`;
+    };
 
 
 
@@ -764,42 +787,59 @@ export default function Chat({ toggleDetails }) {
                             </div>
                         )}
                     </div>
-
-                    <div className="call-controls">
-                        <button
-                            onClick={startCall}
-                            disabled={callStatus !== 'idle' || !otherUserId}
-                            title="Start voice call"
-                        >
-                            <img src="./phone.png" alt="Call" />
-                        </button>
-
-                        {callStatus === 'ringing' && (
-                            <div className="incoming-call">
-                                <p>Incoming call from {user?.username}</p>
-                                <button onClick={answerCall} className="accept-call">
-                                    Answer
-                                </button>
-                                <button onClick={endCall} className="decline-call">
-                                    Decline
-                                </button>
+                    <div className="call-container">
+                        {/* Caller's Preview Modal */}
+                        {['calling', 'ringing', 'ongoing'].includes(callStatus) && (
+                            <div className={`call-preview ${callStatus}`}>
+                                
+                                <div className="call-body">
+                                    {callStatus === 'calling' && (
+                                        <div>
+                                            <p>Waiting for {user?.username} to answer...</p>
+                                            <button onClick={endCall} className="decline-call">
+                                                End Call
+                                            </button>
+                                        </div>
+                                    )}
+                                    {callStatus === 'ringing' && (
+                                        <>
+                                            <p>Incoming call from {currentUser?.username}</p>
+                                            <div className="call-actions">
+                                                <button onClick={answerCall} className="accept-call">
+                                                    Answer
+                                                </button>
+                                                <button onClick={endCall} className="decline-call">
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                    {callStatus === 'ongoing' && (
+                                        <>
+                                            <p>Call in progress ({formatDuration(callDuration)})</p>
+                                            <button onClick={endCall} className="end-call">
+                                                End Call
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
+                        {/* Call Controls */}
+                        <div className="call-controls">
+                            <button
+                                onClick={startCall}
+                                disabled={callStatus !== 'idle' || !otherUserId}
+                                title="Start voice call"
+                            >
+                                <img src="./phone.png" alt="Call" />
+                            </button>
 
-                        {['calling', 'ongoing'].includes(callStatus) && (
-                            <div className="active-call">
-                                <p>
-                                    {callStatus === 'calling' ? 'Calling...' : 'Call in progress'}
-                                </p>
-                                <button onClick={endCall} className="end-call">
-                                    End Call
-                                </button>
-                            </div>
-                        )}
-
-                        <audio ref={localAudioRef} muted autoPlay playsInline />
-                        <audio ref={remoteAudioRef} autoPlay playsInline />
+                            <audio ref={localAudioRef} muted autoPlay playsInline />
+                            <audio ref={remoteAudioRef} autoPlay playsInline />
+                        </div>
                     </div>
+
 
 
 

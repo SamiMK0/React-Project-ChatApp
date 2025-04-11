@@ -28,6 +28,70 @@ export default function useVoiceCall(currentUserId, otherUserId) {
     const hasRemoteDescriptionSet = useRef(false);
 
 
+    const cleanupCall = async () => {
+        try {
+            // Stop local media streams
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            setLocalStream(null);
+    
+            // Stop remote media streams
+            if (remoteStream) {
+                remoteStream.getTracks().forEach(track => track.stop());
+            }
+            setRemoteStream(null);
+    
+            // Close the peer connection
+            if (peerConnection.current) {
+                peerConnection.current.onicecandidate = null;
+                peerConnection.current.ontrack = null;
+                peerConnection.current.onconnectionstatechange = null;
+    
+                // Ensure the connection is closed
+                if (peerConnection.current.connectionState !== 'closed') {
+                    peerConnection.current.close();
+                }
+                peerConnection.current = null;
+            }
+    
+            // Reset state
+            setCallStatus('idle');
+            setCurrentCallId(null);
+            hasRemoteDescriptionSet.current = false;
+        } catch (error) {
+            console.error("Cleanup error:", error);
+        }
+    };
+    const endCall = async () => {
+        try {
+            if (currentCallId) {
+                // Update Firestore to mark the call as ended for both participants
+                await updateDoc(doc(db, 'calls', currentCallId), {
+                    status: 'ended',
+                    endedAt: serverTimestamp(),
+                });
+            }
+        } catch (error) {
+            console.error("Error ending call:", error);
+        } finally {
+            // Perform cleanup on the current user's side
+            await cleanupCall();
+        }
+    };
+    useEffect(() => {
+        const handleBeforeUnload = async () => {
+            await endCall();
+        };
+    
+        window.addEventListener('beforeunload', handleBeforeUnload);
+    
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [endCall]);
+    
+
     const setupWebRTC = async () => {
         const config = {
             iceServers: [
@@ -54,38 +118,13 @@ export default function useVoiceCall(currentUserId, otherUserId) {
         };
 
         peerConnection.current.onconnectionstatechange = () => {
-            if (peerConnection.current?.connectionState === 'disconnected') {
-                endCall();
+            if (peerConnection.current?.connectionState === 'disconnected' || peerConnection.current?.connectionState === 'closed') {
+                cleanupCall();
             }
         };
     };
 
-    const cleanupCall = async () => {
-        try {
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            if (remoteStream) {
-                remoteStream.getTracks().forEach(track => track.stop());
-            }
     
-            if (peerConnection.current) {
-                peerConnection.current.onicecandidate = null;
-                peerConnection.current.ontrack = null;
-                peerConnection.current.onconnectionstatechange = null;
-                peerConnection.current.close();
-                peerConnection.current = null;
-            }
-    
-            setLocalStream(null);
-            setRemoteStream(null);
-            setCallStatus('idle');
-            setCurrentCallId(null);
-            hasRemoteDescriptionSet.current = false;
-        } catch (error) {
-            console.error("Cleanup error:", error);
-        }
-    };
     
 
     const startCall = async () => {
@@ -177,25 +216,7 @@ export default function useVoiceCall(currentUserId, otherUserId) {
         }
     };
 
-    const endCall = async () => {
-        try {
-            if (currentCallId) {
-                // Update Firestore to mark the call as ended only for the caller.
-                await updateDoc(doc(db, 'calls', currentCallId), {
-                    status: 'ended',
-                    endedAt: serverTimestamp(),
-                });
     
-                // Ensure cleanup on the caller's side
-                if (callStatus === 'ongoing') {
-                    await cleanupCall();
-                }
-            }
-        } catch (error) {
-            console.error("Error ending call:", error);
-            await cleanupCall();
-        }
-    };
     
 
     useEffect(() => {
@@ -252,15 +273,12 @@ export default function useVoiceCall(currentUserId, otherUserId) {
             ongoingCallsQuery,
             (snapshot) => {
                 if (snapshot.empty) return;
-                
+        
                 const callData = snapshot.docs[0].data();
-                
-                // Call has ended — cleanup only on the receiver's side if the status is 'ended'
+        
+                // If the call has ended, clean up on both sides
                 if (callData.status === 'ended') {
-                    // Check if this is the receiver and only clean up on the receiver side
-                    if (callData.receiverId === currentUserId) {
-                        endCall();
-                    }
+                    endCall(); // Trigger cleanup logic
                     return;
                 }
         
@@ -277,7 +295,13 @@ export default function useVoiceCall(currentUserId, otherUserId) {
                 }
         
                 // Set remote description for the caller if needed
-                if (callData.answer && callData.callerId === currentUserId && peerConnection.current && peerConnection.current.signalingState === 'have-local-offer' && !hasRemoteDescriptionSet.current) {
+                if (
+                    callData.answer &&
+                    callData.callerId === currentUserId &&
+                    peerConnection.current &&
+                    peerConnection.current.signalingState === 'have-local-offer' &&
+                    !hasRemoteDescriptionSet.current
+                ) {
                     peerConnection.current.setRemoteDescription(callData.answer)
                         .then(() => {
                             hasRemoteDescriptionSet.current = true;
@@ -290,7 +314,6 @@ export default function useVoiceCall(currentUserId, otherUserId) {
                 console.error("Ongoing call listener error:", error);
             }
         );
-        
         
 
         return () => {

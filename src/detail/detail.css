@@ -111,3 +111,71 @@
         }
     }
 }
+
+/* responsive */
+
+/* Extra small devices (phones, 320px-480px) */
+/* @media (min-width: 320px) { ... } */
+
+/* Small laptops (1024px-1280px) */
+@media (min-width: 1024px) and (max-width: 1280px) {
+    .detail{
+        width: 20%;
+    }
+
+    .detail .user{
+        width: 100%;
+    }
+
+    .detail .photos{
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .detail .photos .photoItem{
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .detail .photos .photoItem .photoDetail span{
+        width: 100%;
+        font-size: 12px !important; 
+    }
+
+    .detail .photos .photoItem .photoDetail{
+        width: 100%;
+        gap: 3px !important;
+
+    }
+
+    .detail .info{
+        padding: 11px;
+        width: 100%;
+    }
+
+    .container{
+        width: 91vw;
+    }
+}
+
+
+/* Tablets (768px-1023px) */
+@media (min-width: 768px) and (max-width: 1023px){
+    .detail{
+        display: none;
+    }
+}
+
+
+/* Small devices (phones, 481px-767px) */
+@media (min-width: 481px) and (max-width: 767px){
+    .detail{
+        display: none;
+    }
+}
+
+
+

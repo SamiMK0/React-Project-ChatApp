@@ -1,3 +1,4 @@
+
 import "./chat.css";
 import EmojiPicker from "emoji-picker-react";
 import { arrayUnion, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
@@ -325,16 +326,39 @@ export default function Chat({ toggleDetails }) {
                 imgUrl = await getDownloadURL(imgRef);
             }
 
-            // Send message with isSeen: false initially
+
+            const messageData = {
+                senderId: currentUser.id,
+                text,
+                createdAt: new Date(),
+                isSeen: false,
+                ...(imgUrl && { img: imgUrl }),
+                ...(replyingTo && { 
+                    replyTo: {
+                        messageId: replyingTo.createdAt.seconds,
+                        senderId: replyingTo.senderId,
+                        text: replyingTo.text || null,
+                        img: replyingTo.img || null,
+                        audioUrl: replyingTo.audioUrl || null
+                    }
+                })
+            };
+    
             await updateDoc(doc(db, "chats", chatId), {
-                messages: arrayUnion({
-                    senderId: currentUser.id,
-                    text,
-                    createdAt: new Date(),
-                    isSeen: false, // Add this line
-                    ...(imgUrl && { img: imgUrl }),
-                }),
+                messages: arrayUnion(messageData),
             });
+
+
+            // // Send message with isSeen: false initially
+            // await updateDoc(doc(db, "chats", chatId), {
+            //     messages: arrayUnion({
+            //         senderId: currentUser.id,
+            //         text,
+            //         createdAt: new Date(),
+            //         isSeen: false, // Add this line
+            //         ...(imgUrl && { img: imgUrl }),
+            //     }),
+            // });
 
             // Update last message in user chats
             const userIDs = [currentUser.id, user.id];
@@ -354,6 +378,8 @@ export default function Chat({ toggleDetails }) {
                     }
                 }
             });
+
+            setReplyingTo(null)
         } catch (err) {
             console.error("Error sending message:", err);
         }
@@ -709,6 +735,8 @@ export default function Chat({ toggleDetails }) {
 
     // Add this state near your other state declarations
     const [emojiPickerForMessage, setEmojiPickerForMessage] = useState(null);
+    const [quickReactionPicker, setQuickReactionPicker] = useState(null);
+    const [fullEmojiPicker, setFullEmojiPicker] = useState(null);
 
 
     // Add this function to handle adding reactions
@@ -754,6 +782,58 @@ export default function Chat({ toggleDetails }) {
             console.error("Error adding reaction:", error);
         }
     };
+
+    
+    const [replyingTo, setReplyingTo] = useState(null);
+
+    const handleReply = (message) => {
+        setReplyingTo(message);
+        // Optionally focus the input field
+        document.querySelector('.bottom input[type="text"]')?.focus();
+    };
+
+
+    const QuickReactions = ({ messageId, onSelect }) => {
+        const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '➕'];
+        
+        return (
+          <div className="quick-reactions">
+            {quickEmojis.map((emoji) => (
+              <button
+                key={emoji}
+                className="quick-reaction"
+                onClick={() => {
+                  if (emoji === '➕') {
+                    onSelect('more');
+                  } else {
+                    onSelect(emoji);
+                  }
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        );
+      };
+
+
+      // Handle clicks outside reaction pickers
+useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (quickReactionPicker && !e.target.closest('.quick-reactions')) {
+        setQuickReactionPicker(null);
+      }
+      if (fullEmojiPicker && !e.target.closest('.message-emoji-picker')) {
+        setFullEmojiPicker(null);
+      }
+    };
+  
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [quickReactionPicker, fullEmojiPicker]);
 
     return (
         <div className="chat">
@@ -850,7 +930,7 @@ export default function Chat({ toggleDetails }) {
 
             </div>
 
-            {searchQuery && (
+            {/* {searchQuery && (
                 <div className="search-results">
                     {searchResults.length > 0 ? (
                         searchResults.map((message, index) => (
@@ -890,7 +970,7 @@ export default function Chat({ toggleDetails }) {
                         </div>
                     )}
                 </div>
-            )}
+            )} */}
 
 
             {/* Chat Details Section */}
@@ -925,6 +1005,37 @@ export default function Chat({ toggleDetails }) {
                                 data-message-id={message.createdAt.seconds}
                             >
                                 <div className="texts">
+
+                                {message.replyTo && (
+                                        <div className="message-reply" onClick={() => {
+                                            // Find the original message and scroll to it
+                                            const originalMessage = chat.messages.find(
+                                                m => m.createdAt.seconds === message.replyTo.messageId
+                                            );
+                                            if (originalMessage) {
+                                                const element = document.querySelector(
+                                                    `[data-message-id="${originalMessage.createdAt.seconds}"]`
+                                                );
+                                                if (element) {
+                                                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                                                    // Add temporary highlight
+                                                    element.classList.add("highlighted");
+                                                    setTimeout(() => element.classList.remove("highlighted"), 2000);
+                                                }
+                                            }
+                                        }}>
+                                            <span className="reply-sender">
+                                                {message.replyTo.senderId === currentUser.id ? "You" : user.username}
+                                            </span>
+                                            <span className="message-reply-content">
+                                                {message.replyTo.text 
+                                                    ? message.replyTo.text 
+                                                    : message.replyTo.img 
+                                                        ? "📷 Image" 
+                                                        : "🎤 Voice message"}
+                                            </span>
+                                        </div>
+                                    )}
 
                                     {message.img && (
                                         <div className="message-image-container">
@@ -1030,16 +1141,28 @@ export default function Chat({ toggleDetails }) {
 
                                             {menuOpen === message.createdAt && (
                                                 <div className="dropdown-menu animate-fade-in">
+
                                                     <button
-                                                        onClick={() => {
-                                                            setEmojiPickerForMessage(message.createdAt);
-                                                            setMenuOpen(null);
-                                                        }}
-                                                        className="react-button"
-                                                    >
-                                                        <span>😀</span>
-                                                        Add Reaction
-                                                    </button>
+                                                                onClick={() => {
+                                                                    handleReply(message);
+                                                                    setMenuOpen(null);
+                                                                }}
+                                                                className="reply-button"
+                                                            >
+                                                                <span>↩️</span>
+                                                                Reply
+                                                            </button>
+
+                                                            <button
+                                                                onClick={() => {
+                                                                    setQuickReactionPicker(message.createdAt);
+                                                                    setMenuOpen(null);
+                                                                }}
+                                                                className="react-button"
+                                                                >
+                                                                <span>😀</span>
+                                                                Add Reaction
+                                                                </button>
                                                     <button
                                                         onClick={() => deleteMessage(message.createdAt)}
                                                         className="delete-button"
@@ -1058,6 +1181,7 @@ export default function Chat({ toggleDetails }) {
                                         <button
                                             onClick={() => setEmojiPickerForMessage(null)}
                                             className="close-emoji-picker"
+                                            aria-label="Close emoji picker"
                                         >
                                             ×
                                         </button>
@@ -1068,12 +1192,75 @@ export default function Chat({ toggleDetails }) {
                                             }}
                                             width={300}
                                             height={350}
-                                            searchDisabled
-                                            skinTonesDisabled
-                                            previewConfig={{ showPreview: false }}
+                                            previewConfig={{
+                                                showPreview: false
+                                            }}
+                                            searchPlaceholder="Search emojis..."
+                                            skinTonePickerLocation="PREVIEW"
+                                            groupVisibility={{
+                                                flags: false,
+                                                symbols: false
+                                            }}
+                                            suggestedEmojisMode="recent"
+                                            lazyLoadEmojis={true}
+                                            theme="light"
+                                            categories={[
+                                                { name: "Smileys & People", category: "smileys_people" },
+                                                { name: "Animals & Nature", category: "animals_nature" },
+                                                { name: "Food & Drink", category: "food_drink" },
+                                                { name: "Activities", category: "activities" },
+                                                { name: "Travel & Places", category: "travel_places" },
+                                                { name: "Objects", category: "objects" }
+                                            ]}
                                         />
                                     </div>
                                 )}
+
+                                        {quickReactionPicker === message.createdAt && (
+                                        <QuickReactions
+                                            messageId={message.createdAt}
+                                            onSelect={(emoji) => {
+                                            if (emoji === 'more') {
+                                                setQuickReactionPicker(null);
+                                                setFullEmojiPicker(message.createdAt);
+                                            } else {
+                                                addReaction(message.createdAt, emoji);
+                                                setQuickReactionPicker(null);
+                                            }
+                                            }}
+                                        />
+                                        )}
+
+                                        {fullEmojiPicker === message.createdAt && (
+                                        <div className="message-emoji-picker">
+                                            <button
+                                            onClick={() => setFullEmojiPicker(null)}
+                                            className="close-emoji-picker"
+                                            aria-label="Close emoji picker"
+                                            >
+                                            ×
+                                            </button>
+                                            <EmojiPicker
+                                            onEmojiClick={(e) => {
+                                                addReaction(message.createdAt, e.emoji);
+                                                setFullEmojiPicker(null);
+                                            }}
+                                            width={300}
+                                            height={350}
+                                            previewConfig={{ showPreview: false }}
+                                            searchPlaceholder="Search emojis..."
+                                            skinTonePickerLocation="PREVIEW"
+                                            groupVisibility={{
+                                                flags: false,
+                                                symbols: false
+                                            }}
+                                            suggestedEmojisMode="recent"
+                                            lazyLoadEmojis={true}
+                                            theme="light"
+                                            />
+                                        </div>
+                                        )}
+
                             </div>
 
                         );
@@ -1141,6 +1328,25 @@ export default function Chat({ toggleDetails }) {
                         )}
                     </div>
                 )}
+
+
+                {replyingTo && (
+                        <div className="reply-preview">
+                            <div className="reply-preview-content">
+                                <span className="reply-label">Replying to:</span>
+                                {replyingTo.text && <p>{replyingTo.text}</p>}
+                                {replyingTo.img && <span>📷 Image</span>}
+                                {replyingTo.audioUrl && <span>🎤 Voice message</span>}
+                            </div>
+                            <button 
+                                onClick={() => setReplyingTo(null)} 
+                                className="cancel-reply"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    )}
+
                 <input
                     type="text"
                     placeholder={isCurrentUserBlocked || isReceiverBlocked ? "You cannot able to send" : "Type a message..."}

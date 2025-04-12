@@ -183,3 +183,25 @@
         color: #1f8ff1d4;
     }
 }
+
+
+@media (min-width: 500px) and (max-width: 700px){
+    .login{
+        gap: 0px;
+    }
+}
+
+
+@media (min-width: 400px) and (max-width: 499px){
+    .login{
+        gap: 0px;
+    }
+
+    .item{
+        width: 50%;
+    }
+
+    .item form{
+        width: 100%;
+    }
+}

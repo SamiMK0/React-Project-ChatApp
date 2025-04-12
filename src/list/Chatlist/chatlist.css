@@ -354,3 +354,24 @@
 .story-modal-content:hover .story-next-btn {
     opacity: 1;
 }
+
+
+@media (min-width: 481px) and (max-width: 767px){
+    .Chatlist .search{
+        width: 100%;
+        padding: 10px;
+    }
+
+    .Chatlist .search .searchbar{
+        width: 100%;
+    }
+
+    .Chatlist .search .searchbar input{
+        width: 100%;
+    }
+
+    .Chatlist .delete-button-container{
+        position: static;
+        transform: translateY(0);
+    }
+}

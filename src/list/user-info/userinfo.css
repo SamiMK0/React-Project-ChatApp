@@ -293,3 +293,31 @@
     background-color: #4a4863;
     cursor: not-allowed;
 }
+
+@media (min-width: 481px) and (max-width: 767px){
+    .userinfo{
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+
+    .userinfo .user{
+        width: 100%;
+        height: 100px;
+    }
+
+    .userinfo .user .user-text-info{
+        width: 100%;
+    }
+
+    .userinfo .user .user-text-info h2{
+        width: 100%;
+        font-size: 12px;
+    }
+
+    .userinfo .user .user-text-info p{
+        width: 100%;
+    }
+}

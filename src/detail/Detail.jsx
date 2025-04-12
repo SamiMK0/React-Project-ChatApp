@@ -39,14 +39,6 @@ export default function Detail() {
         }
     };
 
-    const handleLogout = () => {
-        useChatStore.getState().resetChat(); 
-        useUserStore.getState().resetUser();
-    
-        setTimeout(() => {
-            auth.signOut().catch(err => console.error("Logout Error:", err));
-        }, 0);
-    };
     
     
 
@@ -55,7 +47,6 @@ export default function Detail() {
             <div className="user">
                 <img src={user?.avatarUrl || "./avatar.png"} alt="" />
                 <h2>{user?.username}</h2>
-                <p>{chatData?.lastMessage || "No messages yet."}</p> {/* Example: showing latest message from chat */}
             </div>
 
             <div className="info">
@@ -149,9 +140,7 @@ export default function Detail() {
                             ? "User blocked"
                             : "Block User"}
                     </button>
-                    <button className="logout" onClick={handleLogout}>
-                        Logout
-                    </button>
+                    
                 </div>
             </div>
         </div>

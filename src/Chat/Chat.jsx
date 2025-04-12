@@ -909,7 +909,7 @@ useEffect(() => {
                         <div className="call-controls">
                             <button
                                 onClick={startCall}
-                                disabled={callStatus !== 'idle' || !otherUserId}
+                                disabled={callStatus !== 'idle' || !otherUserId || isCurrentUserBlocked || isReceiverBlocked}
                                 title="Start voice call"
                             >
                                 <img src="./phone.png" alt="Call" />

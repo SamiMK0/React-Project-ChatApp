@@ -19,13 +19,15 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-export default function useVoiceCall(currentUserId, otherUserId) {
+export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
     const [callStatus, setCallStatus] = useState('idle');
     const [localStream, setLocalStream] = useState(null);
     const [remoteStream, setRemoteStream] = useState(null);
     const peerConnection = useRef(null);
     const [currentCallId, setCurrentCallId] = useState(null);
     const hasRemoteDescriptionSet = useRef(false);
+    const [callerUsername, setCallerUsername] = useState(null);
+
 
 
     const cleanupCall = async () => {
@@ -156,6 +158,7 @@ export default function useVoiceCall(currentUserId, otherUserId) {
             await setDoc(doc(db, 'calls', callId), {
                 callId,
                 callerId: currentUserId,
+                callerUsername: currentUser?.username || 'Unknown', // Add fallback
                 receiverId: otherUserId,
                 offer,
                 status: 'calling',
@@ -246,7 +249,8 @@ export default function useVoiceCall(currentUserId, otherUserId) {
                 
                 const callDoc = snapshot.docs[0];
                 const callData = callDoc.data();
-                
+
+                setCallerUsername(callData.callerUsername || "Unknown");
                 setCurrentCallId(callDoc.id);
                 setCallStatus('ringing');
                 
@@ -329,6 +333,8 @@ export default function useVoiceCall(currentUserId, otherUserId) {
         endCall,
         localStream,
         remoteStream,
-        currentCallId
+        currentCallId,
+        callerUsername 
     };
+    
 }

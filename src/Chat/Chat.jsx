@@ -33,15 +33,17 @@ export default function Chat({ toggleDetails }) {
     const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
     const { currentUser } = useUserStore();
     const otherUserId = user?.id;
-    const {
+    const { 
         callStatus,
         startCall,
         answerCall,
         endCall,
         localStream,
         remoteStream,
-        currentCallId
-    } = useVoiceCall(currentUser?.id, otherUserId);
+        currentCallId,
+        callerUsername
+    } = useVoiceCall(currentUser?.id, otherUserId, currentUser); 
+    
     // State for call duration
     const [callDuration, setCallDuration] = useState(0);
 
@@ -333,7 +335,7 @@ export default function Chat({ toggleDetails }) {
                 createdAt: new Date(),
                 isSeen: false,
                 ...(imgUrl && { img: imgUrl }),
-                ...(replyingTo && { 
+                ...(replyingTo && {
                     replyTo: {
                         messageId: replyingTo.createdAt.seconds,
                         senderId: replyingTo.senderId,
@@ -343,7 +345,7 @@ export default function Chat({ toggleDetails }) {
                     }
                 })
             };
-    
+
             await updateDoc(doc(db, "chats", chatId), {
                 messages: arrayUnion(messageData),
             });
@@ -783,7 +785,7 @@ export default function Chat({ toggleDetails }) {
         }
     };
 
-    
+
     const [replyingTo, setReplyingTo] = useState(null);
 
     const handleReply = (message) => {
@@ -795,45 +797,45 @@ export default function Chat({ toggleDetails }) {
 
     const QuickReactions = ({ messageId, onSelect }) => {
         const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '➕'];
-        
+
         return (
-          <div className="quick-reactions">
-            {quickEmojis.map((emoji) => (
-              <button
-                key={emoji}
-                className="quick-reaction"
-                onClick={() => {
-                  if (emoji === '➕') {
-                    onSelect('more');
-                  } else {
-                    onSelect(emoji);
-                  }
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+            <div className="quick-reactions">
+                {quickEmojis.map((emoji) => (
+                    <button
+                        key={emoji}
+                        className="quick-reaction"
+                        onClick={() => {
+                            if (emoji === '➕') {
+                                onSelect('more');
+                            } else {
+                                onSelect(emoji);
+                            }
+                        }}
+                    >
+                        {emoji}
+                    </button>
+                ))}
+            </div>
         );
-      };
+    };
 
 
-      // Handle clicks outside reaction pickers
-useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (quickReactionPicker && !e.target.closest('.quick-reactions')) {
-        setQuickReactionPicker(null);
-      }
-      if (fullEmojiPicker && !e.target.closest('.message-emoji-picker')) {
-        setFullEmojiPicker(null);
-      }
-    };
-  
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [quickReactionPicker, fullEmojiPicker]);
+    // Handle clicks outside reaction pickers
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (quickReactionPicker && !e.target.closest('.quick-reactions')) {
+                setQuickReactionPicker(null);
+            }
+            if (fullEmojiPicker && !e.target.closest('.message-emoji-picker')) {
+                setFullEmojiPicker(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [quickReactionPicker, fullEmojiPicker]);
 
     return (
         <div className="chat">
@@ -871,7 +873,7 @@ useEffect(() => {
                         {/* Caller's Preview Modal */}
                         {['calling', 'ringing', 'ongoing'].includes(callStatus) && (
                             <div className={`call-preview ${callStatus}`}>
-                                
+
                                 <div className="call-body">
                                     {callStatus === 'calling' && (
                                         <div>
@@ -883,7 +885,7 @@ useEffect(() => {
                                     )}
                                     {callStatus === 'ringing' && (
                                         <>
-                                            <p>Incoming call from {currentUser?.username}</p>
+                                            <p>Incoming call from {callerUsername}</p>
                                             <div className="call-actions">
                                                 <button onClick={answerCall} className="accept-call">
                                                     Answer
@@ -1006,7 +1008,7 @@ useEffect(() => {
                             >
                                 <div className="texts">
 
-                                {message.replyTo && (
+                                    {message.replyTo && (
                                         <div className="message-reply" onClick={() => {
                                             // Find the original message and scroll to it
                                             const originalMessage = chat.messages.find(
@@ -1028,10 +1030,10 @@ useEffect(() => {
                                                 {message.replyTo.senderId === currentUser.id ? "You" : user.username}
                                             </span>
                                             <span className="message-reply-content">
-                                                {message.replyTo.text 
-                                                    ? message.replyTo.text 
-                                                    : message.replyTo.img 
-                                                        ? "📷 Image" 
+                                                {message.replyTo.text
+                                                    ? message.replyTo.text
+                                                    : message.replyTo.img
+                                                        ? "📷 Image"
                                                         : "🎤 Voice message"}
                                             </span>
                                         </div>
@@ -1143,26 +1145,26 @@ useEffect(() => {
                                                 <div className="dropdown-menu animate-fade-in">
 
                                                     <button
-                                                                onClick={() => {
-                                                                    handleReply(message);
-                                                                    setMenuOpen(null);
-                                                                }}
-                                                                className="reply-button"
-                                                            >
-                                                                <span>↩️</span>
-                                                                Reply
-                                                            </button>
+                                                        onClick={() => {
+                                                            handleReply(message);
+                                                            setMenuOpen(null);
+                                                        }}
+                                                        className="reply-button"
+                                                    >
+                                                        <span>↩️</span>
+                                                        Reply
+                                                    </button>
 
-                                                            <button
-                                                                onClick={() => {
-                                                                    setQuickReactionPicker(message.createdAt);
-                                                                    setMenuOpen(null);
-                                                                }}
-                                                                className="react-button"
-                                                                >
-                                                                <span>😀</span>
-                                                                Add Reaction
-                                                                </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setQuickReactionPicker(message.createdAt);
+                                                            setMenuOpen(null);
+                                                        }}
+                                                        className="react-button"
+                                                    >
+                                                        <span>😀</span>
+                                                        Add Reaction
+                                                    </button>
                                                     <button
                                                         onClick={() => deleteMessage(message.createdAt)}
                                                         className="delete-button"
@@ -1216,10 +1218,10 @@ useEffect(() => {
                                     </div>
                                 )}
 
-                                        {quickReactionPicker === message.createdAt && (
-                                        <QuickReactions
-                                            messageId={message.createdAt}
-                                            onSelect={(emoji) => {
+                                {quickReactionPicker === message.createdAt && (
+                                    <QuickReactions
+                                        messageId={message.createdAt}
+                                        onSelect={(emoji) => {
                                             if (emoji === 'more') {
                                                 setQuickReactionPicker(null);
                                                 setFullEmojiPicker(message.createdAt);
@@ -1227,20 +1229,20 @@ useEffect(() => {
                                                 addReaction(message.createdAt, emoji);
                                                 setQuickReactionPicker(null);
                                             }
-                                            }}
-                                        />
-                                        )}
+                                        }}
+                                    />
+                                )}
 
-                                        {fullEmojiPicker === message.createdAt && (
-                                        <div className="message-emoji-picker">
-                                            <button
+                                {fullEmojiPicker === message.createdAt && (
+                                    <div className="message-emoji-picker">
+                                        <button
                                             onClick={() => setFullEmojiPicker(null)}
                                             className="close-emoji-picker"
                                             aria-label="Close emoji picker"
-                                            >
+                                        >
                                             ×
-                                            </button>
-                                            <EmojiPicker
+                                        </button>
+                                        <EmojiPicker
                                             onEmojiClick={(e) => {
                                                 addReaction(message.createdAt, e.emoji);
                                                 setFullEmojiPicker(null);
@@ -1257,9 +1259,9 @@ useEffect(() => {
                                             suggestedEmojisMode="recent"
                                             lazyLoadEmojis={true}
                                             theme="light"
-                                            />
-                                        </div>
-                                        )}
+                                        />
+                                    </div>
+                                )}
 
                             </div>
 
@@ -1331,21 +1333,21 @@ useEffect(() => {
 
 
                 {replyingTo && (
-                        <div className="reply-preview">
-                            <div className="reply-preview-content">
-                                <span className="reply-label">Replying to:</span>
-                                {replyingTo.text && <p>{replyingTo.text}</p>}
-                                {replyingTo.img && <span>📷 Image</span>}
-                                {replyingTo.audioUrl && <span>🎤 Voice message</span>}
-                            </div>
-                            <button 
-                                onClick={() => setReplyingTo(null)} 
-                                className="cancel-reply"
-                            >
-                                ×
-                            </button>
+                    <div className="reply-preview">
+                        <div className="reply-preview-content">
+                            <span className="reply-label">Replying to:</span>
+                            {replyingTo.text && <p>{replyingTo.text}</p>}
+                            {replyingTo.img && <span>📷 Image</span>}
+                            {replyingTo.audioUrl && <span>🎤 Voice message</span>}
                         </div>
-                    )}
+                        <button
+                            onClick={() => setReplyingTo(null)}
+                            className="cancel-reply"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
 
                 <input
                     type="text"

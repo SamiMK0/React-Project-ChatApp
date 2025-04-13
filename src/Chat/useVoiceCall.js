@@ -32,35 +32,34 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
 
     const cleanupCall = async () => {
         try {
-            // Stop local media streams
+            // Stop all media tracks
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
+                setLocalStream(null);
             }
-            setLocalStream(null);
-    
-            // Stop remote media streams
+            
             if (remoteStream) {
                 remoteStream.getTracks().forEach(track => track.stop());
+                setRemoteStream(null);
             }
-            setRemoteStream(null);
-    
-            // Close the peer connection
+            
+            // Close peer connection
             if (peerConnection.current) {
                 peerConnection.current.onicecandidate = null;
                 peerConnection.current.ontrack = null;
                 peerConnection.current.onconnectionstatechange = null;
-    
-                // Ensure the connection is closed
+                
                 if (peerConnection.current.connectionState !== 'closed') {
                     peerConnection.current.close();
                 }
                 peerConnection.current = null;
             }
-    
+            
             // Reset state
             setCallStatus('idle');
             setCurrentCallId(null);
             hasRemoteDescriptionSet.current = false;
+            setCallerUsername(null);
         } catch (error) {
             console.error("Cleanup error:", error);
         }
@@ -158,16 +157,29 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             await setDoc(doc(db, 'calls', callId), {
                 callId,
                 callerId: currentUserId,
-                callerUsername: currentUser?.username || 'Unknown', // Add fallback
+                callerUsername: currentUser?.username || 'Unknown',
                 receiverId: otherUserId,
                 offer,
                 status: 'calling',
                 createdAt: serverTimestamp(),
                 participants: {
                     [currentUserId]: true,
-                    [otherUserId]: true
+                    [otherUserId]: false // Initially false for receiver
                 },
                 candidates: {}
+            });
+            
+            // Add a listener for the receiver's response
+            const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
+                const data = doc.data();
+                if (data.status === 'ongoing' && data.answer) {
+                    setCallStatus('ongoing');
+                    unsubscribe(); // Stop listening once call is ongoing
+                }
+                if (data.status === 'ended') {
+                    endCall();
+                    unsubscribe();
+                }
             });
             
         } catch (error) {
@@ -210,7 +222,10 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             await updateDoc(callDoc, {
                 answer,
                 status: 'ongoing',
-                updatedAt: serverTimestamp()
+                updatedAt: serverTimestamp(),
+                // Explicitly set both participants to true
+                [`participants.${currentUserId}`]: true,
+                [`participants.${otherUserId}`]: true
             });
             
         } catch (error) {
@@ -278,18 +293,29 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             (snapshot) => {
                 if (snapshot.empty) return;
         
-                const callData = snapshot.docs[0].data();
+                const callDoc = snapshot.docs[0];
+                const callData = callDoc.data();
         
-                // If the call has ended, clean up on both sides
-                if (callData.status === 'ended') {
-                    endCall(); // Trigger cleanup logic
-                    return;
+                // If we're the caller and the call was answered
+                if (callData.answer && callData.callerId === currentUserId) {
+                    setCurrentCallId(callDoc.id);
+                    if (callStatus !== 'ongoing') {
+                        setCallStatus('ongoing');
+                    }
+                    
+                    if (peerConnection.current && !hasRemoteDescriptionSet.current) {
+                        peerConnection.current.setRemoteDescription(callData.answer)
+                            .then(() => {
+                                hasRemoteDescriptionSet.current = true;
+                            })
+                            .catch(e => console.error("Error setting remote description:", e));
+                    }
                 }
         
-                // Handle ICE candidates...
-                if (callData.candidates && peerConnection.current && peerConnection.current.remoteDescription) {
+                // Handle ICE candidates
+                if (callData.candidates) {
                     Object.entries(callData.candidates).forEach(([userId, candidates]) => {
-                        if (userId !== currentUserId) {
+                        if (userId !== currentUserId && peerConnection.current) {
                             candidates.forEach(candidate => {
                                 peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate))
                                     .catch(e => console.error("Error adding ICE candidate:", e));
@@ -298,20 +324,9 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                     });
                 }
         
-                // Set remote description for the caller if needed
-                if (
-                    callData.answer &&
-                    callData.callerId === currentUserId &&
-                    peerConnection.current &&
-                    peerConnection.current.signalingState === 'have-local-offer' &&
-                    !hasRemoteDescriptionSet.current
-                ) {
-                    peerConnection.current.setRemoteDescription(callData.answer)
-                        .then(() => {
-                            hasRemoteDescriptionSet.current = true;
-                            setCallStatus('ongoing');
-                        })
-                        .catch(e => console.error("Error setting remote description:", e));
+                // Handle call ending
+                if (callData.status === 'ended') {
+                    endCall();
                 }
             },
             (error) => {

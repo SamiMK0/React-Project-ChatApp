@@ -40,39 +40,51 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                 localStream.getTracks().forEach(track => track.stop());
                 setLocalStream(null);
             }
-
+    
             if (remoteStream) {
                 remoteStream.getTracks().forEach(track => track.stop());
                 setRemoteStream(null);
             }
-
+    
             // Close peer connection
             if (peerConnection.current) {
+                // Remove all event listeners
                 peerConnection.current.onicecandidate = null;
                 peerConnection.current.ontrack = null;
                 peerConnection.current.onconnectionstatechange = null;
-
+                peerConnection.current.oniceconnectionstatechange = null;
+                peerConnection.current.onnegotiationneeded = null;
+                peerConnection.current.onsignalingstatechange = null;
+    
+                // Unsubscribe from Firestore candidates
+                if (peerConnection.current._unsubscribeCandidates) {
+                    peerConnection.current._unsubscribeCandidates();
+                    delete peerConnection.current._unsubscribeCandidates;
+                }
+    
+                // Clear queued candidates
+                if (peerConnection.current._queuedCandidates) {
+                    delete peerConnection.current._queuedCandidates;
+                }
+    
+                // Close connection if not already closed
                 if (peerConnection.current.connectionState !== 'closed') {
                     peerConnection.current.close();
                 }
                 peerConnection.current = null;
             }
-
+    
             // Reset state
             setCallStatus('idle');
             setCurrentCallId(null);
             hasRemoteDescriptionSet.current = false;
             setCallerUsername(null);
+            hasAnswered.current = false;
         } catch (error) {
             console.error("Cleanup error:", error);
         }
-
-        if (peerConnection.current?._unsubscribeCandidates) {
-            peerConnection.current._unsubscribeCandidates();
-            delete peerConnection.current._unsubscribeCandidates;
-        }
-
     };
+
     const endCall = async () => {
         try {
             if (currentCallId) {
@@ -108,7 +120,10 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             return;
         }
     
-        if (peerConnection.current) return;
+        // Clean up any existing connection first
+        if (peerConnection.current) {
+            await cleanupCall();
+        }
     
         const config = {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -117,39 +132,55 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
         peerConnection.current = new RTCPeerConnection(config);
     
         peerConnection.current.onicecandidate = (event) => {
-            if (event.candidate) {
+            if (event.candidate && peerConnection.current) {
                 updateDoc(doc(db, 'calls', callId), {
                     [`candidates.${currentUserId}`]: arrayUnion(event.candidate.toJSON()),
                     updatedAt: serverTimestamp()
-                });
+                }).catch(e => console.error("Error updating candidates:", e));
             }
         };
     
         peerConnection.current.ontrack = (event) => {
             if (event.streams && event.streams[0]) {
-                setRemoteStream(event.streams[0]);
+                setRemoteStream(new MediaStream(event.streams[0].getTracks()));
             }
         };
     
         peerConnection.current.onconnectionstatechange = () => {
-            if (['disconnected', 'closed'].includes(peerConnection.current?.connectionState)) {
+            console.log("Connection state changed:", peerConnection.current?.connectionState);
+            if (['disconnected', 'failed', 'closed'].includes(peerConnection.current?.connectionState)) {
                 cleanupCall();
             }
         };
     
-        const unsubscribeCandidates = onSnapshot(doc(db, 'calls', callId), (docSnap) => {
+        peerConnection.current.oniceconnectionstatechange = () => {
+            console.log("ICE connection state:", peerConnection.current?.iceConnectionState);
+        };
+    
+        // Store the unsubscribe function directly on the peerConnection
+        peerConnection.current._unsubscribeCandidates = onSnapshot(doc(db, 'calls', callId), async (docSnap) => {
+            if (!peerConnection.current) return;
+            
             const data = docSnap.data();
             if (data?.candidates) {
                 const remoteCandidates = data.candidates[otherUserId] || [];
-                remoteCandidates.forEach(candidate => {
-                    peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate))
-                        .catch(e => console.error("Error adding ICE candidate:", e));
-                });
+                for (const candidate of remoteCandidates) {
+                    try {
+                        if (peerConnection.current.remoteDescription) {
+                            await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+                        } else {
+                            // Queue candidates if remote description isn't set yet
+                            peerConnection.current._queuedCandidates = peerConnection.current._queuedCandidates || [];
+                            peerConnection.current._queuedCandidates.push(candidate);
+                        }
+                    } catch (e) {
+                        console.error("Error adding ICE candidate:", e);
+                    }
+                }
             }
         });
-    
-        peerConnection.current._unsubscribeCandidates = unsubscribeCandidates;
     };
+    
     
 
 
@@ -235,57 +266,77 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
 
     const hasAnswered = useRef(false);
 
-    const answerCall = async () => {
-        if (hasAnswered.current) return;
-        hasAnswered.current = true;
+    
 
-        try {
-            if (callStatus !== 'ringing' || !currentCallId) return;
+// STUN servers for NAT traversal (you can customize this)
+const configuration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' }
+  ]
+};
+const answerCall = async () => {
+    if (hasAnswered.current || !currentCallId) return;
+    hasAnswered.current = true;
 
-            setCallStatus('ongoing');
-            await setupWebRTC();
+    try {
+        const callRef = doc(db, 'calls', currentCallId);
+        const callSnapshot = await getDoc(callRef);
 
-            const callDoc = doc(db, 'calls', currentCallId);
-            const callSnap = await getDoc(callDoc);
-
-            if (!callSnap.exists()) {
-                throw new Error("Call document not found");
-            }
-
-            const callData = callSnap.data();
-
-            if (!peerConnection.current.currentRemoteDescription) {
-                await peerConnection.current.setRemoteDescription(callData.offer);
-            }
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true
-                },
-                video: false
-            });
-            setLocalStream(stream);
-            stream.getTracks().forEach(track => {
-                peerConnection.current.addTrack(track, stream);
-            });
-
-            const answer = await peerConnection.current.createAnswer();
-            await peerConnection.current.setLocalDescription(answer);
-
-            await updateDoc(callDoc, {
-                answer,
-                status: 'ongoing',
-                updatedAt: serverTimestamp(),
-                [`participants.${currentUserId}`]: true,
-                [`participants.${otherUserId}`]: true
-            });
-
-        } catch (error) {
-            console.error("Answer failed:", error);
-            await cleanupCall();
+        if (!callSnapshot.exists()) {
+            console.error('Call document does not exist');
+            return;
         }
-    };
+
+        const callData = callSnapshot.data();
+        const offer = callData.offer;
+
+        if (!offer) {
+            console.error('Missing offer in call document');
+            return;
+        }
+
+        await setupWebRTC(currentCallId);
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true },
+            video: false
+        });
+
+        setLocalStream(stream);
+        stream.getTracks().forEach(track => {
+            peerConnection.current.addTrack(track, stream);
+        });
+
+        // Set remote description first
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Process any queued ICE candidates
+        if (peerConnection.current._queuedCandidates) {
+            for (const candidate of peerConnection.current._queuedCandidates) {
+                await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+            delete peerConnection.current._queuedCandidates;
+        }
+
+        const answer = await peerConnection.current.createAnswer();
+        await peerConnection.current.setLocalDescription(answer);
+
+        await updateDoc(callRef, {
+            answer,
+            status: 'ongoing',
+            [`participants.${currentUserId}`]: true,
+            updatedAt: serverTimestamp()
+        });
+
+        setCallStatus('ongoing');
+    } catch (error) {
+        console.error("Error answering call:", error);
+        await cleanupCall();
+    }
+};
+
+
+  
 
 
 
@@ -342,41 +393,59 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             }
         );
 
-        const unsubscribeOngoing = onSnapshot(
-            ongoingCallsQuery,
-            (snapshot) => {
-                if (snapshot.empty) return;
+        // In your ongoing call listener (where you handle the answer)
+const unsubscribeOngoing = onSnapshot(
+    ongoingCallsQuery,
+    async (snapshot) => {
+        if (snapshot.empty) return;
 
-                const callDoc = snapshot.docs[0];
-                const callData = callDoc.data();
+        const callDoc = snapshot.docs[0];
+        const callData = callDoc.data();
 
-                // If we're the caller and the call was answered
-                if (callData.answer && callData.callerId === currentUserId) {
-                    setCurrentCallId(callDoc.id);
-                    if (callStatus !== 'ongoing') {
-                        setCallStatus('ongoing');
-                    }
-
-                    if (peerConnection.current && !hasRemoteDescriptionSet.current) {
-                        peerConnection.current.setRemoteDescription(callData.answer)
-                            .then(() => {
-                                hasRemoteDescriptionSet.current = true;
-                            })
-                            .catch(e => console.error("Error setting remote description:", e));
-                    }
-                }
-
-
-
-                // Handle call ending
-                if (callData.status === 'ended') {
-                    endCall();
-                }
-            },
-            (error) => {
-                console.error("Ongoing call listener error:", error);
+        // If we're the caller and the call was answered
+        if (callData.answer && callData.callerId === currentUserId) {
+            setCurrentCallId(callDoc.id);
+            if (callStatus !== 'ongoing') {
+                setCallStatus('ongoing');
             }
-        );
+
+            if (peerConnection.current && !hasRemoteDescriptionSet.current) {
+                try {
+                    // Only set remote description if we're in the right state
+                    if (peerConnection.current.signalingState === 'have-local-offer') {
+                        await peerConnection.current.setRemoteDescription(
+                            new RTCSessionDescription(callData.answer)
+                        );
+                        hasRemoteDescriptionSet.current = true;
+                        
+                        // Process any queued candidates
+                        if (peerConnection.current._queuedCandidates) {
+                            for (const candidate of peerConnection.current._queuedCandidates) {
+                                await peerConnection.current.addIceCandidate(
+                                    new RTCIceCandidate(candidate)
+                                );
+                            }
+                            delete peerConnection.current._queuedCandidates;
+                        }
+                    } else {
+                        console.log('Not setting remote answer - signaling state is:', 
+                            peerConnection.current.signalingState);
+                    }
+                } catch (e) {
+                    console.error("Error setting remote description:", e);
+                }
+            }
+        }
+
+        // Handle call ending
+        if (callData.status === 'ended') {
+            await cleanupCall();
+        }
+    },
+    (error) => {
+        console.error("Ongoing call listener error:", error);
+    }
+);
 
 
         return () => {

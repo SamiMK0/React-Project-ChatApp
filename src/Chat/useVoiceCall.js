@@ -1,7 +1,7 @@
-import { 
-    useState, 
-    useRef, 
-    useEffect 
+import {
+    useState,
+    useRef,
+    useEffect
 } from 'react';
 import {
     doc,
@@ -15,7 +15,7 @@ import {
     where,
     orderBy,
     serverTimestamp,
-    limit 
+    limit
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -29,7 +29,7 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
     const [callerUsername, setCallerUsername] = useState(null);
 
 
-    
+
 
 
 
@@ -40,24 +40,24 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                 localStream.getTracks().forEach(track => track.stop());
                 setLocalStream(null);
             }
-            
+
             if (remoteStream) {
                 remoteStream.getTracks().forEach(track => track.stop());
                 setRemoteStream(null);
             }
-            
+
             // Close peer connection
             if (peerConnection.current) {
                 peerConnection.current.onicecandidate = null;
                 peerConnection.current.ontrack = null;
                 peerConnection.current.onconnectionstatechange = null;
-                
+
                 if (peerConnection.current.connectionState !== 'closed') {
                     peerConnection.current.close();
                 }
                 peerConnection.current = null;
             }
-            
+
             // Reset state
             setCallStatus('idle');
             setCurrentCallId(null);
@@ -71,7 +71,7 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             peerConnection.current._unsubscribeCandidates();
             delete peerConnection.current._unsubscribeCandidates;
         }
-        
+
     };
     const endCall = async () => {
         try {
@@ -93,29 +93,32 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
         const handleBeforeUnload = async () => {
             await endCall();
         };
-    
+
         window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, [endCall]);
-    
 
-    const setupWebRTC = async () => {
+
+    const setupWebRTC = async (callId) => {
+        if (!callId) {
+            console.error("Call ID is not defined for WebRTC setup.");
+            return;
+        }
+    
         if (peerConnection.current) return;
     
         const config = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-            ]
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         };
     
         peerConnection.current = new RTCPeerConnection(config);
     
         peerConnection.current.onicecandidate = (event) => {
-            if (event.candidate && currentCallId) {
-                updateDoc(doc(db, 'calls', currentCallId), {
+            if (event.candidate) {
+                updateDoc(doc(db, 'calls', callId), {
                     [`candidates.${currentUserId}`]: arrayUnion(event.candidate.toJSON()),
                     updatedAt: serverTimestamp()
                 });
@@ -129,13 +132,13 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
         };
     
         peerConnection.current.onconnectionstatechange = () => {
-            if (peerConnection.current?.connectionState === 'disconnected' || peerConnection.current?.connectionState === 'closed') {
+            if (['disconnected', 'closed'].includes(peerConnection.current?.connectionState)) {
                 cleanupCall();
             }
         };
-
-        const unsubscribeCandidates = onSnapshot(doc(db, 'calls', currentCallId), (doc) => {
-            const data = doc.data();
+    
+        const unsubscribeCandidates = onSnapshot(doc(db, 'calls', callId), (docSnap) => {
+            const data = docSnap.data();
             if (data?.candidates) {
                 const remoteCandidates = data.candidates[otherUserId] || [];
                 remoteCandidates.forEach(candidate => {
@@ -144,44 +147,47 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                 });
             }
         });
-        
-        // Cleanup the listener when the call ends
+    
         peerConnection.current._unsubscribeCandidates = unsubscribeCandidates;
     };
     
 
-    
-    
+
+
+
 
     const startCall = async () => {
         try {
             if (callStatus !== 'idle') return;
-            
+
             await cleanupCall();
-            
+
             const callId = `call_${currentUserId}_${otherUserId}_${Date.now()}`;
             setCurrentCallId(callId);
             setCallStatus('calling');
-            
-            await setupWebRTC();
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
+
+            setCurrentCallId(callId);
+            setCallStatus('calling');
+
+            await setupWebRTC(callId); // 👈 Pass callId as a parameter
+
+            const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true
                 },
-                video: false 
+                video: false
             });
             setLocalStream(stream);
             stream.getTracks().forEach(track => {
                 peerConnection.current.addTrack(track, stream);
             });
-            
+
             const offer = await peerConnection.current.createOffer({
                 offerToReceiveAudio: true
             });
             await peerConnection.current.setLocalDescription(offer);
-            
+
             await setDoc(doc(db, 'calls', callId), {
                 callId,
                 callerId: currentUserId,
@@ -196,31 +202,31 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                 },
                 candidates: {}
             });
-            
+
             // Add a listener for the receiver's response
             let answerAlreadySet = false;
 
-const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
-    const data = doc.data();
+            const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
+                const data = doc.data();
 
-    if (data.status === 'ongoing' && data.answer && !answerAlreadySet) {
-        answerAlreadySet = true;
+                if (data.status === 'ongoing' && data.answer && !answerAlreadySet) {
+                    answerAlreadySet = true;
 
-        if (peerConnection.current.signalingState === 'have-local-offer') {
-            peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
+                    if (peerConnection.current.signalingState === 'have-local-offer') {
+                        peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    }
 
-        setCallStatus('ongoing');
-        unsubscribe();
-    }
+                    setCallStatus('ongoing');
+                    unsubscribe();
+                }
 
-    if (data.status === 'ended') {
-        endCall();
-        unsubscribe();
-    }
-});
+                if (data.status === 'ended') {
+                    endCall();
+                    unsubscribe();
+                }
+            });
 
-            
+
         } catch (error) {
             console.error("Call failed:", error);
             await cleanupCall();
@@ -229,61 +235,61 @@ const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
 
     const hasAnswered = useRef(false);
 
-const answerCall = async () => {
-    if (hasAnswered.current) return;
-    hasAnswered.current = true;
+    const answerCall = async () => {
+        if (hasAnswered.current) return;
+        hasAnswered.current = true;
 
-    try {
-        if (callStatus !== 'ringing' || !currentCallId) return;
-        
-        setCallStatus('ongoing');
-        await setupWebRTC();
+        try {
+            if (callStatus !== 'ringing' || !currentCallId) return;
 
-        const callDoc = doc(db, 'calls', currentCallId);
-        const callSnap = await getDoc(callDoc);
+            setCallStatus('ongoing');
+            await setupWebRTC();
 
-        if (!callSnap.exists()) {
-            throw new Error("Call document not found");
+            const callDoc = doc(db, 'calls', currentCallId);
+            const callSnap = await getDoc(callDoc);
+
+            if (!callSnap.exists()) {
+                throw new Error("Call document not found");
+            }
+
+            const callData = callSnap.data();
+
+            if (!peerConnection.current.currentRemoteDescription) {
+                await peerConnection.current.setRemoteDescription(callData.offer);
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true
+                },
+                video: false
+            });
+            setLocalStream(stream);
+            stream.getTracks().forEach(track => {
+                peerConnection.current.addTrack(track, stream);
+            });
+
+            const answer = await peerConnection.current.createAnswer();
+            await peerConnection.current.setLocalDescription(answer);
+
+            await updateDoc(callDoc, {
+                answer,
+                status: 'ongoing',
+                updatedAt: serverTimestamp(),
+                [`participants.${currentUserId}`]: true,
+                [`participants.${otherUserId}`]: true
+            });
+
+        } catch (error) {
+            console.error("Answer failed:", error);
+            await cleanupCall();
         }
-
-        const callData = callSnap.data();
-
-        if (!peerConnection.current.currentRemoteDescription) {
-            await peerConnection.current.setRemoteDescription(callData.offer);
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true
-            },
-            video: false 
-        });
-        setLocalStream(stream);
-        stream.getTracks().forEach(track => {
-            peerConnection.current.addTrack(track, stream);
-        });
-
-        const answer = await peerConnection.current.createAnswer();
-        await peerConnection.current.setLocalDescription(answer);
-
-        await updateDoc(callDoc, {
-            answer,
-            status: 'ongoing',
-            updatedAt: serverTimestamp(),
-            [`participants.${currentUserId}`]: true,
-            [`participants.${otherUserId}`]: true
-        });
-
-    } catch (error) {
-        console.error("Answer failed:", error);
-        await cleanupCall();
-    }
-};
+    };
 
 
-    
-    
+
+
 
     useEffect(() => {
         if (!currentUserId || !otherUserId) return;
@@ -309,27 +315,27 @@ const answerCall = async () => {
             incomingCallsQuery,
             (snapshot) => {
                 if (snapshot.empty || callStatus !== 'idle') return;
-                
+
                 const callDoc = snapshot.docs[0];
                 const callData = callDoc.data();
 
                 setCallerUsername(callData.callerUsername || "Unknown");
                 setCurrentCallId(callDoc.id);
                 setCallStatus('ringing');
-                
+
                 // Set timeout to auto-decline if not answered
                 const timeout = setTimeout(() => {
                     if (callStatus === 'ringing') {
                         endCall();
                     }
                 }, 30000); // 30 seconds timeout
-                
+
                 return () => clearTimeout(timeout);
             },
             (error) => {
                 console.error("Incoming call listener error:", error);
                 if (error.code === 'failed-precondition') {
-                    console.log('Create index for:', 
+                    console.log('Create index for:',
                         'collection: calls',
                         'fields: receiverId (asc), status (asc), createdAt (desc)');
                 }
@@ -340,17 +346,17 @@ const answerCall = async () => {
             ongoingCallsQuery,
             (snapshot) => {
                 if (snapshot.empty) return;
-        
+
                 const callDoc = snapshot.docs[0];
                 const callData = callDoc.data();
-        
+
                 // If we're the caller and the call was answered
                 if (callData.answer && callData.callerId === currentUserId) {
                     setCurrentCallId(callDoc.id);
                     if (callStatus !== 'ongoing') {
                         setCallStatus('ongoing');
                     }
-                    
+
                     if (peerConnection.current && !hasRemoteDescriptionSet.current) {
                         peerConnection.current.setRemoteDescription(callData.answer)
                             .then(() => {
@@ -359,9 +365,9 @@ const answerCall = async () => {
                             .catch(e => console.error("Error setting remote description:", e));
                     }
                 }
-        
-                
-        
+
+
+
                 // Handle call ending
                 if (callData.status === 'ended') {
                     endCall();
@@ -371,7 +377,7 @@ const answerCall = async () => {
                 console.error("Ongoing call listener error:", error);
             }
         );
-        
+
 
         return () => {
             unsubscribeIncoming();
@@ -387,7 +393,7 @@ const answerCall = async () => {
         localStream,
         remoteStream,
         currentCallId,
-        callerUsername 
+        callerUsername
     };
-    
+
 }

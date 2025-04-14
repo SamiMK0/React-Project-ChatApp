@@ -30,59 +30,59 @@ export default function Chat({ toggleDetails }) {
     });
     const [showDetails, setShowDetails] = useState(false); // New state for chat details toggle
 
-    const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
-    const { currentUser } = useUserStore();
-    const otherUserId = user?.id;
-    const { 
-        callStatus,
-        startCall,
-        answerCall,
-        endCall,
-        localStream,
-        remoteStream,
-        currentCallId,
-        callerUsername
-    } = useVoiceCall(currentUser?.id, otherUserId, currentUser); 
-    
-    // State for call duration
-    const [callDuration, setCallDuration] = useState(0);
+        const { chatId, user, isCurrentUserBlocked, isReceiverBlocked } = useChatStore();
+        const { currentUser } = useUserStore();
+        const otherUserId = user?.id;
+        const { 
+            callStatus,
+            startCall,
+            answerCall,
+            endCall,
+            localStream,
+            remoteStream,
+            currentCallId,
+            callerUsername
+        } = useVoiceCall(currentUser?.id, otherUserId, currentUser); 
+        
+        // State for call duration
+        const [callDuration, setCallDuration] = useState(0);
 
-    // Audio refs
-    const localAudioRef = useRef(null);
-    const remoteAudioRef = useRef(null);
+        // Audio refs
+        const localAudioRef = useRef(null);
+        const remoteAudioRef = useRef(null);
 
-    // Update audio streams when they change
-    useEffect(() => {
-        if (localStream && localAudioRef.current) {
-            localAudioRef.current.srcObject = localStream;
-        }
-    }, [localStream]);
-    useEffect(() => {
-        if (remoteStream && remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = remoteStream;
-        }
-    }, [remoteStream]);
+        // Update audio streams when they change
+        useEffect(() => {
+            if (localStream && localAudioRef.current) {
+                localAudioRef.current.srcObject = localStream;
+            }
+        }, [localStream]);
+        useEffect(() => {
+            if (remoteStream && remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = remoteStream;
+            }
+        }, [remoteStream]);
 
-    // Timer for call duration
-    useEffect(() => {
-        let interval;
-        if (callStatus === 'ongoing') {
-            interval = setInterval(() => {
-                setCallDuration((prev) => prev + 1);
-            }, 1000);
-        } else {
-            clearInterval(interval);
-            setCallDuration(0);
-        }
-        return () => clearInterval(interval);
-    }, [callStatus]);
+        // Timer for call duration
+        useEffect(() => {
+            let interval;
+            if (callStatus === 'ongoing') {
+                interval = setInterval(() => {
+                    setCallDuration((prev) => prev + 1);
+                }, 1000);
+            } else {
+                clearInterval(interval);
+                setCallDuration(0);
+            }
+            return () => clearInterval(interval);
+        }, [callStatus]);
 
-    // Format call duration
-    const formatDuration = (seconds) => {
-        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-        const secs = (seconds % 60).toString().padStart(2, '0');
-        return `${mins}:${secs}`;
-    };
+        // Format call duration
+        const formatDuration = (seconds) => {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        };
 
 
 

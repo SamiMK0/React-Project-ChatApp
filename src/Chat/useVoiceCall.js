@@ -29,6 +29,9 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
     const [callerUsername, setCallerUsername] = useState(null);
 
 
+    
+
+
 
     const cleanupCall = async () => {
         try {
@@ -63,6 +66,12 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
         } catch (error) {
             console.error("Cleanup error:", error);
         }
+
+        if (peerConnection.current?._unsubscribeCandidates) {
+            peerConnection.current._unsubscribeCandidates();
+            delete peerConnection.current._unsubscribeCandidates;
+        }
+        
     };
     const endCall = async () => {
         try {
@@ -94,15 +103,16 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
     
 
     const setupWebRTC = async () => {
+        if (peerConnection.current) return;
+    
         const config = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                // Add TURN servers here if needed for NAT traversal
             ]
         };
-        
+    
         peerConnection.current = new RTCPeerConnection(config);
-        
+    
         peerConnection.current.onicecandidate = (event) => {
             if (event.candidate && currentCallId) {
                 updateDoc(doc(db, 'calls', currentCallId), {
@@ -111,19 +121,34 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                 });
             }
         };
-        
+    
         peerConnection.current.ontrack = (event) => {
             if (event.streams && event.streams[0]) {
                 setRemoteStream(event.streams[0]);
             }
         };
-
+    
         peerConnection.current.onconnectionstatechange = () => {
             if (peerConnection.current?.connectionState === 'disconnected' || peerConnection.current?.connectionState === 'closed') {
                 cleanupCall();
             }
         };
+
+        const unsubscribeCandidates = onSnapshot(doc(db, 'calls', currentCallId), (doc) => {
+            const data = doc.data();
+            if (data?.candidates) {
+                const remoteCandidates = data.candidates[otherUserId] || [];
+                remoteCandidates.forEach(candidate => {
+                    peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate))
+                        .catch(e => console.error("Error adding ICE candidate:", e));
+                });
+            }
+        });
+        
+        // Cleanup the listener when the call ends
+        peerConnection.current._unsubscribeCandidates = unsubscribeCandidates;
     };
+    
 
     
     
@@ -141,7 +166,10 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             await setupWebRTC();
             
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true,
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true
+                },
                 video: false 
             });
             setLocalStream(stream);
@@ -170,17 +198,28 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
             });
             
             // Add a listener for the receiver's response
-            const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
-                const data = doc.data();
-                if (data.status === 'ongoing' && data.answer) {
-                    setCallStatus('ongoing');
-                    unsubscribe(); // Stop listening once call is ongoing
-                }
-                if (data.status === 'ended') {
-                    endCall();
-                    unsubscribe();
-                }
-            });
+            let answerAlreadySet = false;
+
+const unsubscribe = onSnapshot(doc(db, 'calls', callId), (doc) => {
+    const data = doc.data();
+
+    if (data.status === 'ongoing' && data.answer && !answerAlreadySet) {
+        answerAlreadySet = true;
+
+        if (peerConnection.current.signalingState === 'have-local-offer') {
+            peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+
+        setCallStatus('ongoing');
+        unsubscribe();
+    }
+
+    if (data.status === 'ended') {
+        endCall();
+        unsubscribe();
+    }
+});
+
             
         } catch (error) {
             console.error("Call failed:", error);
@@ -188,51 +227,60 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
         }
     };
 
-    const answerCall = async () => {
-        try {
-            if (callStatus !== 'ringing' || !currentCallId) return;
-            
-            setCallStatus('ongoing');
-            await setupWebRTC();
-            
-            const callDoc = doc(db, 'calls', currentCallId);
-            const callSnap = await getDoc(callDoc);
-            
-            if (!callSnap.exists()) {
-                throw new Error("Call document not found");
-            }
-            
-            const callData = callSnap.data();
-            await peerConnection.current.setRemoteDescription(callData.offer);
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true,
-                video: false 
-            });
-            setLocalStream(stream);
-            stream.getTracks().forEach(track => {
-                peerConnection.current.addTrack(track, stream);
-            });
-            
-            const answer = await peerConnection.current.createAnswer({
-                offerToReceiveAudio: true
-            });
-            await peerConnection.current.setLocalDescription(answer);
-            
-            await updateDoc(callDoc, {
-                answer,
-                status: 'ongoing',
-                updatedAt: serverTimestamp(),
-                // Explicitly set both participants to true
-                [`participants.${currentUserId}`]: true,
-                [`participants.${otherUserId}`]: true
-            });
-            
-        } catch (error) {
-            console.error("Answer failed:", error);
-            await cleanupCall();
+    const hasAnswered = useRef(false);
+
+const answerCall = async () => {
+    if (hasAnswered.current) return;
+    hasAnswered.current = true;
+
+    try {
+        if (callStatus !== 'ringing' || !currentCallId) return;
+        
+        setCallStatus('ongoing');
+        await setupWebRTC();
+
+        const callDoc = doc(db, 'calls', currentCallId);
+        const callSnap = await getDoc(callDoc);
+
+        if (!callSnap.exists()) {
+            throw new Error("Call document not found");
         }
-    };
+
+        const callData = callSnap.data();
+
+        if (!peerConnection.current.currentRemoteDescription) {
+            await peerConnection.current.setRemoteDescription(callData.offer);
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+            },
+            video: false 
+        });
+        setLocalStream(stream);
+        stream.getTracks().forEach(track => {
+            peerConnection.current.addTrack(track, stream);
+        });
+
+        const answer = await peerConnection.current.createAnswer();
+        await peerConnection.current.setLocalDescription(answer);
+
+        await updateDoc(callDoc, {
+            answer,
+            status: 'ongoing',
+            updatedAt: serverTimestamp(),
+            [`participants.${currentUserId}`]: true,
+            [`participants.${otherUserId}`]: true
+        });
+
+    } catch (error) {
+        console.error("Answer failed:", error);
+        await cleanupCall();
+    }
+};
+
 
     
     
@@ -312,17 +360,7 @@ export default function useVoiceCall(currentUserId, otherUserId, currentUser) {
                     }
                 }
         
-                // Handle ICE candidates
-                if (callData.candidates) {
-                    Object.entries(callData.candidates).forEach(([userId, candidates]) => {
-                        if (userId !== currentUserId && peerConnection.current) {
-                            candidates.forEach(candidate => {
-                                peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate))
-                                    .catch(e => console.error("Error adding ICE candidate:", e));
-                            });
-                        }
-                    });
-                }
+                
         
                 // Handle call ending
                 if (callData.status === 'ended') {

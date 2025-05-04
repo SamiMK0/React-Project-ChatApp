@@ -12,7 +12,6 @@ body{
   justify-content: center;
   height: 100vh;
   color: white;
-  margin-top: 20px;
 
 }
 
@@ -30,10 +29,7 @@ body{
   border: 1px solid rgba(255 , 255 , 255 ,0.125);
   backdrop-filter: blur(19px) saturate(100%);
   display: flex;
-
   margin-top: 100px;
-  
-  
 }
 
 .Loading{
